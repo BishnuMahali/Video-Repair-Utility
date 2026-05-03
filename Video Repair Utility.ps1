@@ -53,9 +53,18 @@ if (Test-Path $cacheFile) {
     $processed = @{}
 }
 
+# Ask recursion preference
+$recursiveChoice = Read-Host "Scan subfolders as well? (y/n)"
+$useRecurse = $false
+if ($recursiveChoice -eq "y") { $useRecurse = $true }
+
 $allFiles = @()
 foreach ($ext in $videoExtensions) {
-    $allFiles += Get-ChildItem -Path $directory -Recurse -Filter $ext -File
+    if ($useRecurse) {
+        $allFiles += Get-ChildItem -Path $directory -Recurse -Filter $ext -File
+    } else {
+        $allFiles += Get-ChildItem -Path $directory -Filter $ext -File
+    }
 }
 
 $total = $allFiles.Count
