@@ -42,44 +42,95 @@ Write-Host " 🎬  ULTIMATE VIDEO REPAIR UTILITY  🎬 " -ForegroundColor White 
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host ""
 
-function Ask-Question($prompt) {
-    Write-Host $prompt -NoNewline -ForegroundColor Yellow
-    Write-Host " (y/n): " -NoNewline -ForegroundColor DarkGray
+function Count-Files($dir) {
+    $parentCount = 0
+    $subCount = 0
+    foreach ($ext in $videoExtensions) {
+        $pFiles = @(Get-ChildItem -Path $dir -Filter $ext -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch "\.tmp\." })
+        $parentCount += $pFiles.Count
+        $sFiles = @(Get-ChildItem -Path $dir -Recurse -Filter $ext -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch "\.tmp\." })
+        $subCount += ($sFiles.Count - $pFiles.Count)
+    }
+    return @{ Parent = $parentCount; Sub = $subCount }
+}
+
+while ($true) {
+    Write-Host "Current Directory: " -NoNewline; Write-Host $directory -ForegroundColor Yellow
+    $counts = Count-Files $directory
+    Write-Host "Parent Folder: " -NoNewline; Write-Host "$($counts.Parent) Files" -ForegroundColor Green -NoNewline
+    Write-Host ", Sub-Folders: " -NoNewline; Write-Host "$($counts.Sub) Files" -ForegroundColor Green
+
+    Write-Host "`n[P] Proceed  |  [C] Change Directory" -ForegroundColor Cyan
+    Write-Host "Press a key: " -NoNewline
+
     while ($true) {
         if ($Host.UI.RawUI.KeyAvailable) { $Host.UI.RawUI.FlushInputBuffer() }
         $keyInfo = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-        $key = $keyInfo.Character.ToString().ToLower()
-        if ($key -eq 'y') {
-            Write-Host "Yes" -ForegroundColor Green
-            return $true
-        } elseif ($key -eq 'n') {
-            Write-Host "No" -ForegroundColor Red
-            return $false
+        $key = $keyInfo.Character.ToString().ToUpper()
+        if ($key -eq 'P' -or $key -eq 'C') {
+            Write-Host $key -ForegroundColor White
+            break
         }
+    }
+
+    if ($key -eq 'C') {
+        $newDir = Select-Folder
+        if ($newDir) { $directory = $newDir }
+        Clear-Host
+        Write-Host "==========================================" -ForegroundColor Cyan
+        Write-Host " 🎬  ULTIMATE VIDEO REPAIR UTILITY  🎬 " -ForegroundColor White -BackgroundColor DarkBlue
+        Write-Host "==========================================" -ForegroundColor Cyan
+        Write-Host ""
+    } else {
+        break
     }
 }
 
-# 1. Directory Selection
-if (Ask-Question "📁 Change current directory? (Current: $directory)") {
-    $directory = Select-Folder
-    Write-Host "   Selected: $directory" -ForegroundColor Cyan
-}
-
-# 2. Subfolders
-$useRecurse = Ask-Question "📂 Scan subfolders as well?"
-
-# 3. Force Fix
-$useForceFix = Ask-Question "🔥 Enable aggressive FORCE FIX if light fix fails?"
-
-# 4. Action on Failure
-if (Ask-Question "🗑️ Delete broken files instead of moving them to a folder?") {
-    $deleteInstead = $true
-} else {
-    $deleteInstead = $false
-}
-
-Write-Host ""
+Clear-Host
 Write-Host "==========================================" -ForegroundColor Cyan
+Write-Host " 🎬  ULTIMATE VIDEO REPAIR UTILITY  🎬 " -ForegroundColor White -BackgroundColor DarkBlue
+Write-Host "==========================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Select Preset:" -ForegroundColor Cyan
+Write-Host "[1] Standard        (Current Dir, Light Fix, Move broken)"
+Write-Host "[2] Deep Standard   (Subfolders, Light Fix, Move broken)"
+Write-Host "[3] Aggressive      (Current Dir, Force Fix, Move broken)"
+Write-Host "[4] Deep Aggressive (Subfolders, Force Fix, Move broken)"
+Write-Host "[5] Custom Settings"
+Write-Host "`nPress 1-5: " -NoNewline
+
+while ($true) {
+    if ($Host.UI.RawUI.KeyAvailable) { $Host.UI.RawUI.FlushInputBuffer() }
+    $keyInfo = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    $key = $keyInfo.Character.ToString()
+    if ($key -match '[1-5]') {
+        Write-Host $key -ForegroundColor White
+        break
+    }
+}
+
+if ($key -eq '1') {
+    $useRecurse = $false; $useForceFix = $false; $deleteInstead = $false
+} elseif ($key -eq '2') {
+    $useRecurse = $true; $useForceFix = $false; $deleteInstead = $false
+} elseif ($key -eq '3') {
+    $useRecurse = $false; $useForceFix = $true; $deleteInstead = $false
+} elseif ($key -eq '4') {
+    $useRecurse = $true; $useForceFix = $true; $deleteInstead = $false
+} elseif ($key -eq '5') {
+    Write-Host "`nEnter custom settings (3 characters: Y/N for [Subfolders][Force Fix][Delete Broken]): " -NoNewline -ForegroundColor Yellow
+    $custom = Read-Host
+    if ($custom.Length -ge 3) {
+        $useRecurse = ($custom[0] -match 'Y|y')
+        $useForceFix = ($custom[1] -match 'Y|y')
+        $deleteInstead = ($custom[2] -match 'Y|y')
+    } else {
+        Write-Host "Invalid input, defaulting to Standard..." -ForegroundColor Red
+        $useRecurse = $false; $useForceFix = $false; $deleteInstead = $false
+    }
+}
+
+Write-Host "`n==========================================" -ForegroundColor Cyan
 Write-Host " Configuration Saved! " -ForegroundColor Green
 Write-Host "==========================================" -ForegroundColor Cyan
 
@@ -154,7 +205,7 @@ function Fix-Video-Light($file) {
 function Fix-Video-Force($file) {
     $out = "$file.tmp.force.mp4"
     if (Test-Path $out) { Remove-Item $out -Force -ErrorAction SilentlyContinue }
-    & ffmpeg -y -err_detect ignore_err -i "$file" -c:v libx264 -c:a aac "$out" 2>$null
+    & ffmpeg -y -err_detect ignore_err -fflags +genpts+discardcorrupt -async 1 -i "$file" -c:v libx264 -c:a aac "$out" 2>$null
     return $out
 }
 
