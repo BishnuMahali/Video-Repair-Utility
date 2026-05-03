@@ -61,23 +61,49 @@ use_recurse = False
 use_gpu = True
 
 # ================= UTILS =================
-def detect_gpu():
-    encoders = [("NVIDIA", "h264_nvenc"), ("AMD", "h264_amf"), ("Intel", "h264_qsv")]
-    for name, encoder in encoders:
+ENCODERS = {
+    "H.264": {"CPU": "libx264", "NVIDIA": "h264_nvenc", "AMD": "h264_amf", "Intel": "h264_qsv"},
+    "HEVC": {"CPU": "libx265", "NVIDIA": "hevc_nvenc", "AMD": "hevc_amf", "Intel": "hevc_qsv"},
+    "AV1": {"CPU": "libsvtav1", "NVIDIA": "av1_nvenc", "AMD": "av1_amf", "Intel": "av1_qsv"}
+}
+
+def detect_gpu(codec):
+    vendors = ["NVIDIA", "AMD", "Intel"]
+    for vendor in vendors:
+        encoder = ENCODERS[codec][vendor]
         cmd = ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=16x16:d=0.1", "-c:v", encoder, "-f", "null", "-"]
         try:
             result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if result.returncode == 0:
-                return name, encoder
+                return vendor, encoder
         except Exception:
             pass
-    return "None", "libx264"
+    return "None", ENCODERS[codec]["CPU"]
 
+gpu_codec = "H.264"
 gpu_name = "Auto"
 gpu_encoder = "auto"
 
 def clear_host():
     os.system('cls' if os.name == 'nt' else 'clear')
+
+def print_box(lines, title=None, color_title="", color_text=""):
+    width = 50
+    print(f"╭{'─' * (width - 2)}╮")
+    if title:
+        print(f"│ {color_title}{title.center(width - 4)}\033[0m │")
+        print(f"├{'─' * (width - 2)}┤")
+    for line in lines:
+        if line == "-":
+            print(f"├{'─' * (width - 2)}┤")
+        else:
+            print(f"│ {color_text}{line.ljust(width - 4)}\033[0m │")
+    print(f"╰{'─' * (width - 2)}╯")
+
+def print_header():
+    clear_host()
+    print_box(["🎬 ULTIMATE VIDEO REPAIR UTILITY 🎬"], color_text="\033[1;36m")
+    print()
 
 def safe_log(msg):
     with open(LOG_FILE, 'a', encoding='utf-8') as f:
@@ -112,19 +138,20 @@ def get_all_files(dir_path, recurse):
     return all_files
 
 # ================= INPUT UI WIZARD =================
-clear_host()
-print("==========================================")
-print(" 🎬  ULTIMATE VIDEO REPAIR UTILITY  🎬 ")
-print("==========================================")
-print()
+print_header()
 
 while True:
-    print(f"Current Directory: {directory}")
     counts = count_files(directory)
-    print(f"Parent Folder: {counts['Parent']} Files, Sub-Folders: {counts['Sub']} Files")
+    print_box([
+        f"Dir: {directory}",
+        "-",
+        f"Parent: {counts['Parent']} Files",
+        f"Sub:    {counts['Sub']} Files",
+        "-",
+        "[P] Proceed | [C] Change Dir"
+    ], title="Directory Info", color_title="\033[1;33m")
 
-    print("\n[P] Proceed  |  [C] Change Directory")
-    print("Press a key: ", end='', flush=True)
+    print("\nPress a key: ", end='', flush=True)
 
     while True:
         key = getch().upper()
@@ -136,25 +163,35 @@ while True:
         new_dir = select_folder(directory)
         if new_dir:
             directory = new_dir
-        clear_host()
-        print("==========================================")
-        print(" 🎬  ULTIMATE VIDEO REPAIR UTILITY  🎬 ")
-        print("==========================================")
-        print()
+        print_header()
     else:
         break
 
-clear_host()
-print("==========================================")
-print(" 🎬  ULTIMATE VIDEO REPAIR UTILITY  🎬 ")
-print("==========================================")
-print()
-print("Select Encoder / GPU Mode:")
-print("[1] Auto   (Detects GPU, falls back to CPU)")
-print("[2] CPU    (libx264)")
-print("[3] NVIDIA (h264_nvenc)")
-print("[4] AMD    (h264_amf)")
-print("[5] Intel  (h264_qsv)")
+print_header()
+print_box([
+    "[1] H.264 (Standard/Legacy)",
+    "[2] HEVC  (H.265 / High Efficiency)",
+    "[3] AV1   (Next-Gen)"
+], title="Select Target Codec", color_title="\033[1;35m")
+print("\nPress 1-3: ", end='', flush=True)
+
+while True:
+    key = getch()
+    if key in ('1', '2', '3'):
+        print(key)
+        if key == '1': gpu_codec = "H.264"
+        elif key == '2': gpu_codec = "HEVC"
+        elif key == '3': gpu_codec = "AV1"
+        break
+
+print_header()
+print_box([
+    f"[1] Auto   (Detects {gpu_codec} hardware)",
+    f"[2] CPU    ({ENCODERS[gpu_codec]['CPU']})",
+    f"[3] NVIDIA ({ENCODERS[gpu_codec]['NVIDIA']})",
+    f"[4] AMD    ({ENCODERS[gpu_codec]['AMD']})",
+    f"[5] Intel  ({ENCODERS[gpu_codec]['Intel']})"
+], title="Select Hardware", color_title="\033[1;34m")
 print("\nPress 1-5: ", end='', flush=True)
 
 while True:
@@ -164,33 +201,27 @@ while True:
         break
 
 if key == '1':
-    auto_name, auto_enc = detect_gpu()
-    if auto_name == "None":
-        gpu_name, gpu_encoder = "CPU", "libx264"
-    else:
-        gpu_name, gpu_encoder = auto_name, auto_enc
+    auto_name, auto_enc = detect_gpu(gpu_codec)
+    gpu_name, gpu_encoder = auto_name, auto_enc
 elif key == '2':
-    gpu_name, gpu_encoder = "CPU", "libx264"
+    gpu_name, gpu_encoder = "CPU", ENCODERS[gpu_codec]["CPU"]
 elif key == '3':
-    gpu_name, gpu_encoder = "NVIDIA", "h264_nvenc"
+    gpu_name, gpu_encoder = "NVIDIA", ENCODERS[gpu_codec]["NVIDIA"]
 elif key == '4':
-    gpu_name, gpu_encoder = "AMD", "h264_amf"
+    gpu_name, gpu_encoder = "AMD", ENCODERS[gpu_codec]["AMD"]
 elif key == '5':
-    gpu_name, gpu_encoder = "Intel", "h264_qsv"
+    gpu_name, gpu_encoder = "Intel", ENCODERS[gpu_codec]["Intel"]
 
-use_gpu = (gpu_encoder != "libx264")
+use_gpu = (gpu_name != "CPU" and gpu_name != "None")
 
-clear_host()
-print("==========================================")
-print(" 🎬  ULTIMATE VIDEO REPAIR UTILITY  🎬 ")
-print("==========================================")
-print()
-print("Select Preset:")
-print("[1] Standard        (Current Dir, Light Fix, Move broken)")
-print("[2] Deep Standard   (Subfolders, Light Fix, Move broken)")
-print("[3] Aggressive      (Current Dir, Force Fix, Move broken)")
-print("[4] Deep Aggressive (Subfolders, Force Fix, Move broken)")
-print("[5] Custom Settings")
+print_header()
+print_box([
+    "[1] Standard   (Dir only, Light, Move broken)",
+    "[2] Deep Std   (Subfolders, Light, Move broken)",
+    "[3] Aggressive (Dir only, Force, Move broken)",
+    "[4] Deep Aggr  (Subfolders, Force, Move broken)",
+    "[5] Custom Settings"
+], title="Select Preset", color_title="\033[1;32m")
 print("\nPress 1-5: ", end='', flush=True)
 
 while True:
@@ -218,13 +249,15 @@ elif key == '5':
         print("Invalid input, defaulting to Standard...")
         use_recurse, use_force_fix, delete_instead = False, False, False
 
-print("\n==========================================")
-print(" Configuration Saved! ")
-print(f" Encoder: {gpu_name} ({gpu_encoder})")
-print("==========================================")
+print_header()
+print_box([
+    "Configuration Saved!",
+    "-",
+    f"Codec:   {gpu_codec}",
+    f"Encoder: {gpu_name} ({gpu_encoder})"
+], title="Success", color_title="\033[1;32m")
 
-clear_host()
-print("🚀 Starting Scan...")
+print("\n🚀 Starting Scan...\n")
 
 # ================= INIT =================
 broken_path = os.path.join(directory, BROKEN_FOLDER)
@@ -296,8 +329,7 @@ def fix_video_force(filepath):
         try: os.remove(out)
         except: pass
 
-    encoder_to_use = gpu_encoder if (use_gpu and gpu_encoder != "libx264") else "libx264"
-    cmd = ["ffmpeg", "-y", "-err_detect", "ignore_err", "-fflags", "+genpts+discardcorrupt", "-async", "1", "-i", filepath, "-c:v", encoder_to_use, "-c:a", "aac", out]
+    cmd = ["ffmpeg", "-y", "-err_detect", "ignore_err", "-fflags", "+genpts+discardcorrupt", "-async", "1", "-i", filepath, "-c:v", gpu_encoder, "-c:a", "aac", out]
     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return out
 
@@ -311,7 +343,15 @@ for filepath in all_files:
 
     cache_key = f"{filepath}|{file_size}"
 
-    print(f"[{count}/{total}] ⏳ Processing: {filepath}", end='')
+    # Format output path to be concise
+    dir_name = os.path.dirname(filepath)
+    file_name = os.path.basename(filepath)
+    if os.path.normpath(dir_name) == os.path.normpath(directory):
+        display_path = file_name
+    else:
+        display_path = f"../{os.path.basename(dir_name)}/{file_name}"
+
+    print(f"[{count}/{total}] ⏳ Processing: {display_path}", end='')
 
     if cache_key in processed:
         print("\n   ⏭️ Skipped (already processed)")
@@ -347,6 +387,7 @@ for filepath in all_files:
             json.dump(processed, f, indent=2)
         continue
 
+    # Cleanup light fix temp file on failure
     if os.path.exists(fixed_light):
         try: os.remove(fixed_light)
         except: pass
@@ -369,6 +410,7 @@ for filepath in all_files:
                 json.dump(processed, f, indent=2)
             continue
 
+        # Cleanup force fix temp file on failure
         if os.path.exists(fixed_force):
             try: os.remove(fixed_force)
             except: pass
