@@ -9,6 +9,8 @@
 # - Moves or deletes broken files
 # - Resume support via cache
 # - Safe stop with logs
+# - Interactive TUI & Emojis
+# - Temp file testing
 # ==========================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -28,136 +30,227 @@ $cacheFile = "repair_cache.json"
 $logFile = "repair_log.txt"
 $brokenFolder = "Broken Files"
 
-# ================= INPUT UI =================
-Write-Host "\n==== VIDEO REPAIR TOOL ====\n"
-
 $directory = $PWD.Path
-Write-Host "Selected Directory: $directory"
+$useForceFix = $false
+$deleteInstead = $false
+$useRecurse = $false
 
-$change = Read-Host "Change directory? (y/n)"
-if ($change -eq "y") {
-    $directory = Select-Folder
+# ================= INPUT UI =================
+function Draw-Menu {
+    Clear-Host
+    Write-Host "==========================================" -ForegroundColor Cyan
+    Write-Host " 🎬  ULTIMATE VIDEO REPAIR UTILITY  🎬 " -ForegroundColor White -BackgroundColor DarkBlue
+    Write-Host "==========================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Selected Directory: " -NoNewline; Write-Host "$directory" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Options:"
+
+    $rStatus = if ($useRecurse) { "[✅ ON ]" } else { "[❌ OFF]" }
+    Write-Host "  R - Scan Subfolders         : $rStatus" -ForegroundColor (if ($useRecurse) { "Green" } else { "DarkGray" })
+
+    $fStatus = if ($useForceFix) { "[✅ ON ]" } else { "[❌ OFF]" }
+    Write-Host "  F - Enable Force Fix        : $fStatus" -ForegroundColor (if ($useForceFix) { "Green" } else { "DarkGray" })
+
+    $dStatus = if ($deleteInstead) { "[🗑️ DEL]" } else { "[📁 MOV]" }
+    Write-Host "  D - Action on Failure       : $dStatus" -ForegroundColor (if ($deleteInstead) { "Red" } else { "Cyan" })
+
+    Write-Host ""
+    Write-Host "Commands:"
+    Write-Host "  C - Change Directory" -ForegroundColor Yellow
+    Write-Host "  S - START SCAN" -ForegroundColor Green
+    Write-Host "  Q - QUIT" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Press a key to select an option..." -ForegroundColor DarkGray
 }
 
-$useForceFix = Read-Host "Enable FORCE FIX? (y/n)"
-$deleteInstead = Read-Host "Delete broken files instead of moving? (y/n)"
+$startScan = $false
+while (-not $startScan) {
+    Draw-Menu
+    if ($Host.UI.RawUI.KeyAvailable) {
+        $Host.UI.RawUI.FlushInputBuffer()
+    }
+    $keyInfo = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    $key = $keyInfo.Character
+    switch -Regex ($key) {
+        "(?i)r" { $useRecurse = -not $useRecurse }
+        "(?i)f" { $useForceFix = -not $useForceFix }
+        "(?i)d" { $deleteInstead = -not $deleteInstead }
+        "(?i)c" { $directory = Select-Folder }
+        "(?i)s" { $startScan = $true }
+        "(?i)q" { Write-Host "Exiting..."; exit }
+    }
+}
+
+Clear-Host
+Write-Host "🚀 Starting Scan..." -ForegroundColor Green
 
 # ================= INIT =================
-if (!(Test-Path "$directory\\$brokenFolder")) {
-    New-Item -ItemType Directory -Path "$directory\\$brokenFolder" | Out-Null
+if (!(Test-Path "$directory\$brokenFolder")) {
+    New-Item -ItemType Directory -Path "$directory\$brokenFolder" | Out-Null
 }
 
 if (Test-Path $cacheFile) {
     $processed = Get-Content $cacheFile | ConvertFrom-Json
+    if ($processed.GetType().Name -eq "Object[]" -or $processed.GetType().Name -eq "PSCustomObject") {
+        # Convert PSCustomObject to Hashtable
+        $hash = @{}
+        $processed.psobject.properties | ForEach-Object { $hash[$_.Name] = $_.Value }
+        $processed = $hash
+    }
 } else {
     $processed = @{}
 }
 
-# Ask recursion preference
-$recursiveChoice = Read-Host "Scan subfolders as well? (y/n)"
-$useRecurse = $false
-if ($recursiveChoice -eq "y") { $useRecurse = $true }
-
 $allFiles = @()
 foreach ($ext in $videoExtensions) {
     if ($useRecurse) {
-        $allFiles += Get-ChildItem -Path $directory -Recurse -Filter $ext -File
+        $allFiles += Get-ChildItem -Path $directory -Recurse -Filter $ext -File | Where-Object { $_.FullName -notmatch "\.tmp\." }
     } else {
-        $allFiles += Get-ChildItem -Path $directory -Filter $ext -File
+        $allFiles += Get-ChildItem -Path $directory -Filter $ext -File | Where-Object { $_.FullName -notmatch "\.tmp\." }
     }
 }
 
 $total = $allFiles.Count
 $count = 0
 
-Write-Host "\nFound $total video files\n"
+Write-Host "🔍 Found $total video files`n" -ForegroundColor Cyan
+
+# Stats tracking
+$stats = @{
+    Total = $total
+    OK = 0
+    FixedLight = 0
+    FixedForce = 0
+    Failed = 0
+    Ignored = 0
+}
 
 # ================= FUNCTIONS =================
 function Test-Video($file) {
+    if (!(Test-Path $file) -or (Get-Item $file).Length -eq 0) {
+        return "File empty or not found"
+    }
     $result = & ffmpeg -v error -i "$file" -f null - 2>&1
     return $result
 }
 
 function Fix-Video-Light($file) {
-    $out = "$file.fixed.mp4"
+    $out = "$file.tmp.light.mp4"
+    if (Test-Path $out) { Remove-Item $out -Force -ErrorAction SilentlyContinue }
     & ffmpeg -y -i "$file" -c copy "$out" 2>$null
     return $out
 }
 
 function Fix-Video-Force($file) {
-    $out = "$file.force.mp4"
+    $out = "$file.tmp.force.mp4"
+    if (Test-Path $out) { Remove-Item $out -Force -ErrorAction SilentlyContinue }
     & ffmpeg -y -err_detect ignore_err -i "$file" -c:v libx264 -c:a aac "$out" 2>$null
     return $out
 }
 
 function Safe-Log($msg) {
-    Add-Content -Path $logFile -Value "$(Get-Date) - $msg"
+    Add-Content -Path $logFile -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - $msg"
 }
 
 # ================= MAIN LOOP =================
 foreach ($file in $allFiles) {
     $count++
-    Write-Host "\n[$count/$total] Processing: $($file.FullName)"
+    $filePath = $file.FullName
+    $fileSize = $file.Length
 
-    if ($processed.ContainsKey($file.FullName)) {
-        Write-Host "Skipped (already processed)"
+    # Generate cache key combining path and size to detect changes
+    $cacheKey = "$filePath|$fileSize"
+
+    Write-Host "[$count/$total] ⏳ Processing: " -NoNewline -ForegroundColor Cyan
+    Write-Host "$filePath" -ForegroundColor White
+
+    if ($processed.ContainsKey($cacheKey)) {
+        Write-Host "   ⏭️ Skipped (already processed)" -ForegroundColor DarkGray
+        $stats.Ignored++
         continue
     }
 
-    $error = Test-Video $file.FullName
+    $errorMsg = Test-Video $filePath
 
-    if (!$error) {
-        Write-Host "OK"
-        $processed[$file.FullName] = "OK"
+    if (!$errorMsg) {
+        Write-Host "   ✅ OK" -ForegroundColor Green
+        $processed[$cacheKey] = "OK"
+        $stats.OK++
         continue
     }
 
-    Write-Host "Errors detected. Attempting light fix..."
-    $fixed = Fix-Video-Light $file.FullName
+    Write-Host "   ⚠️ Errors detected. Attempting light fix..." -ForegroundColor Yellow
+    $fixed = Fix-Video-Light $filePath
 
     if (!(Test-Video $fixed)) {
-        Write-Host "Light fix successful"
-        Remove-Item $file.FullName
-        Rename-Item $fixed $file.FullName
-        $processed[$file.FullName] = "Fixed-Light"
+        Write-Host "   🛠️ Light fix successful" -ForegroundColor Green
+        try {
+            Move-Item -Path $fixed -Destination $filePath -Force -ErrorAction Stop
+            $processed[$cacheKey] = "Fixed-Light"
+            $stats.FixedLight++
+        } catch {
+            Write-Host "   ❌ Error replacing original file. Temp file left at $fixed" -ForegroundColor Red
+            Safe-Log "Error replacing: $filePath. Exception: $($_.Exception.Message)"
+        }
         continue
     }
+    if (Test-Path $fixed) { Remove-Item $fixed -Force -ErrorAction SilentlyContinue }
 
-    if ($useForceFix -eq "y") {
-        Write-Host "Attempting FORCE fix..."
-        $forced = Fix-Video-Force $file.FullName
+    if ($useForceFix) {
+        Write-Host "   🔥 Attempting FORCE fix..." -ForegroundColor Magenta
+        $forced = Fix-Video-Force $filePath
 
         if (!(Test-Video $forced)) {
-            Write-Host "Force fix successful"
-            Remove-Item $file.FullName
-            Rename-Item $forced $file.FullName
-            $processed[$file.FullName] = "Fixed-Force"
+            Write-Host "   🛠️ Force fix successful" -ForegroundColor Green
+            try {
+                Move-Item -Path $forced -Destination $filePath -Force -ErrorAction Stop
+                $processed[$cacheKey] = "Fixed-Force"
+                $stats.FixedForce++
+            } catch {
+                Write-Host "   ❌ Error replacing original file. Temp file left at $forced" -ForegroundColor Red
+                Safe-Log "Error replacing: $filePath. Exception: $($_.Exception.Message)"
+            }
             continue
         }
+        if (Test-Path $forced) { Remove-Item $forced -Force -ErrorAction SilentlyContinue }
     }
 
-    Write-Host "FAILED to repair"
-    Safe-Log "Failed: $($file.FullName)"
+    Write-Host "   ❌ FAILED to repair" -ForegroundColor Red
+    Safe-Log "Failed: $filePath"
 
-    if ($deleteInstead -eq "y") {
-        Remove-Item $file.FullName
-        Write-Host "Deleted"
-    } else {
-        Move-Item $file.FullName "$directory\\$brokenFolder"
-        Write-Host "Moved to Broken Files"
+    try {
+        if ($deleteInstead) {
+            Remove-Item $filePath -Force -ErrorAction Stop
+            Write-Host "   🗑️ Deleted" -ForegroundColor Red
+        } else {
+            Move-Item $filePath "$directory\$brokenFolder" -Force -ErrorAction Stop
+            Write-Host "   📁 Moved to Broken Files" -ForegroundColor Yellow
+        }
+        $processed[$cacheKey] = "Broken"
+    } catch {
+        Write-Host "   ❌ Error moving/deleting file. It might be locked." -ForegroundColor Red
+        Safe-Log "Error moving/deleting: $filePath. Exception: $($_.Exception.Message)"
     }
 
-    $processed[$file.FullName] = "Broken"
+    $stats.Failed++
 
     # Save progress after each file
-    $processed | ConvertTo-Json | Set-Content $cacheFile
+    $processed | ConvertTo-Json -Depth 2 | Set-Content $cacheFile
 }
 
 # ================= SUMMARY =================
-Write-Host "\n==== SUMMARY ===="
-$processed.GetEnumerator() | Group-Object Value | ForEach-Object {
-    Write-Host "$($_.Name): $($_.Count)"
-}
+Write-Host "`n==========================================" -ForegroundColor Cyan
+Write-Host " 📊 SUMMARY " -ForegroundColor White -BackgroundColor DarkBlue
+Write-Host "==========================================" -ForegroundColor Cyan
+Write-Host " 🔢 Total Scanned : $($stats.Total)"
+Write-Host " ✅ OK            : $($stats.OK)" -ForegroundColor Green
+Write-Host " ⏭️ Ignored       : $($stats.Ignored)" -ForegroundColor DarkGray
+Write-Host " 🛠️ Light Fixed   : $($stats.FixedLight)" -ForegroundColor Cyan
+Write-Host " 🔥 Force Fixed   : $($stats.FixedForce)" -ForegroundColor Magenta
+Write-Host " ❌ Failed        : $($stats.Failed)" -ForegroundColor Red
+Write-Host "==========================================" -ForegroundColor Cyan
 
-Write-Host "\nLog saved to $logFile"
-Write-Host "Cache saved to $cacheFile"
+Write-Host "`n📝 Log saved to " -NoNewline; Write-Host "$logFile" -ForegroundColor Yellow
+Write-Host "💾 Cache saved to " -NoNewline; Write-Host "$cacheFile" -ForegroundColor Yellow
+Write-Host "`nDone!" -ForegroundColor Green
