@@ -58,8 +58,23 @@ directory = os.getcwd()
 use_force_fix = False
 delete_instead = False
 use_recurse = False
+use_gpu = True
 
 # ================= UTILS =================
+def detect_gpu():
+    encoders = [("NVIDIA", "h264_nvenc"), ("AMD", "h264_amf"), ("Intel", "h264_qsv")]
+    for name, encoder in encoders:
+        cmd = ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=16x16:d=0.1", "-c:v", encoder, "-f", "null", "-"]
+        try:
+            result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if result.returncode == 0:
+                return name, encoder
+        except Exception:
+            pass
+    return "None", "libx264"
+
+gpu_name, gpu_encoder = detect_gpu()
+
 def clear_host():
     os.system('cls' if os.name == 'nt' else 'clear')
 
@@ -106,6 +121,10 @@ while True:
     print(f"Current Directory: {directory}")
     counts = count_files(directory)
     print(f"Parent Folder: {counts['Parent']} Files, Sub-Folders: {counts['Sub']} Files")
+    if gpu_name != "None":
+        print(f"GPU Mode: Auto ({gpu_name}) [Use Custom Preset to select CPU]")
+    else:
+        print("GPU Mode: Auto (CPU) [No GPU Detected]")
 
     print("\n[P] Proceed  |  [C] Change Directory")
     print("Press a key: ", end='', flush=True)
@@ -156,15 +175,21 @@ elif key == '3':
 elif key == '4':
     use_recurse, use_force_fix, delete_instead = True, True, False
 elif key == '5':
-    print("\nEnter custom settings (3 characters: Y/N for [Subfolders][Force Fix][Delete Broken]): ", end='')
+    print("\nEnter custom settings (4 characters: Y/N for [Subfolders][Force Fix][Delete Broken][Use GPU]): ", end='')
     custom = input().strip().upper()
-    if len(custom) >= 3:
+    if len(custom) >= 4:
         use_recurse = (custom[0] == 'Y')
         use_force_fix = (custom[1] == 'Y')
         delete_instead = (custom[2] == 'Y')
+        use_gpu = (custom[3] == 'Y')
+    elif len(custom) >= 3:
+        use_recurse = (custom[0] == 'Y')
+        use_force_fix = (custom[1] == 'Y')
+        delete_instead = (custom[2] == 'Y')
+        use_gpu = True
     else:
         print("Invalid input, defaulting to Standard...")
-        use_recurse, use_force_fix, delete_instead = False, False, False
+        use_recurse, use_force_fix, delete_instead, use_gpu = False, False, False, True
 
 print("\n==========================================")
 print(" Configuration Saved! ")
@@ -243,7 +268,8 @@ def fix_video_force(filepath):
         try: os.remove(out)
         except: pass
 
-    cmd = ["ffmpeg", "-y", "-err_detect", "ignore_err", "-fflags", "+genpts+discardcorrupt", "-async", "1", "-i", filepath, "-c:v", "libx264", "-c:a", "aac", out]
+    encoder_to_use = gpu_encoder if (use_gpu and gpu_encoder != "libx264") else "libx264"
+    cmd = ["ffmpeg", "-y", "-err_detect", "ignore_err", "-fflags", "+genpts+discardcorrupt", "-async", "1", "-i", filepath, "-c:v", encoder_to_use, "-c:a", "aac", out]
     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return out
 

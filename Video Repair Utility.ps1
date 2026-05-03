@@ -34,6 +34,27 @@ $directory = $PWD.Path
 $useForceFix = $false
 $deleteInstead = $false
 $useRecurse = $false
+$useGpu = $true
+
+# ================= UTILS =================
+function Detect-Gpu {
+    $encoders = @(
+        @{Name="NVIDIA"; Encoder="h264_nvenc"},
+        @{Name="AMD"; Encoder="h264_amf"},
+        @{Name="Intel"; Encoder="h264_qsv"}
+    )
+    foreach ($enc in $encoders) {
+        $result = & ffmpeg -v error -f lavfi -i color=c=black:s=16x16:d=0.1 -c:v $($enc.Encoder) -f null - 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            return $enc
+        }
+    }
+    return @{Name="None"; Encoder="libx264"}
+}
+
+$gpuInfo = Detect-Gpu
+$gpuName = $gpuInfo.Name
+$gpuEncoder = $gpuInfo.Encoder
 
 # ================= INPUT UI WIZARD =================
 Clear-Host
@@ -59,6 +80,12 @@ while ($true) {
     $counts = Count-Files $directory
     Write-Host "Parent Folder: " -NoNewline; Write-Host "$($counts.Parent) Files" -ForegroundColor Green -NoNewline
     Write-Host ", Sub-Folders: " -NoNewline; Write-Host "$($counts.Sub) Files" -ForegroundColor Green
+
+    if ($gpuName -ne "None") {
+        Write-Host "GPU Mode: Auto ($gpuName) [Use Custom Preset to select CPU]" -ForegroundColor Green
+    } else {
+        Write-Host "GPU Mode: Auto (CPU) [No GPU Detected]" -ForegroundColor Green
+    }
 
     Write-Host "`n[P] Proceed  |  [C] Change Directory" -ForegroundColor Cyan
     Write-Host "Press a key: " -NoNewline
@@ -118,15 +145,21 @@ if ($key -eq '1') {
 } elseif ($key -eq '4') {
     $useRecurse = $true; $useForceFix = $true; $deleteInstead = $false
 } elseif ($key -eq '5') {
-    Write-Host "`nEnter custom settings (3 characters: Y/N for [Subfolders][Force Fix][Delete Broken]): " -NoNewline -ForegroundColor Yellow
+    Write-Host "`nEnter custom settings (4 characters: Y/N for [Subfolders][Force Fix][Delete Broken][Use GPU]): " -NoNewline -ForegroundColor Yellow
     $custom = Read-Host
-    if ($custom.Length -ge 3) {
+    if ($custom.Length -ge 4) {
         $useRecurse = ($custom[0] -match 'Y|y')
         $useForceFix = ($custom[1] -match 'Y|y')
         $deleteInstead = ($custom[2] -match 'Y|y')
+        $useGpu = ($custom[3] -match 'Y|y')
+    } elseif ($custom.Length -ge 3) {
+        $useRecurse = ($custom[0] -match 'Y|y')
+        $useForceFix = ($custom[1] -match 'Y|y')
+        $deleteInstead = ($custom[2] -match 'Y|y')
+        $useGpu = $true
     } else {
         Write-Host "Invalid input, defaulting to Standard..." -ForegroundColor Red
-        $useRecurse = $false; $useForceFix = $false; $deleteInstead = $false
+        $useRecurse = $false; $useForceFix = $false; $deleteInstead = $false; $useGpu = $true
     }
 }
 
@@ -205,7 +238,13 @@ function Fix-Video-Light($file) {
 function Fix-Video-Force($file) {
     $out = "$file.tmp.force.mp4"
     if (Test-Path $out) { Remove-Item $out -Force -ErrorAction SilentlyContinue }
-    & ffmpeg -y -err_detect ignore_err -fflags +genpts+discardcorrupt -async 1 -i "$file" -c:v libx264 -c:a aac "$out" 2>$null
+
+    $encoderToUse = "libx264"
+    if ($useGpu -and $gpuEncoder -ne "libx264") {
+        $encoderToUse = $gpuEncoder
+    }
+
+    & ffmpeg -y -err_detect ignore_err -fflags +genpts+discardcorrupt -async 1 -i "$file" -c:v $encoderToUse -c:a aac "$out" 2>$null
     return $out
 }
 
