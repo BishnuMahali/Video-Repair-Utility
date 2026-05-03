@@ -1,0 +1,13 @@
+# Logs
+*.log
+
+# Cache files
+*.json
+
+# Temp video outputs
+*.fixed.mp4
+*.force.mp4
+
+# OS
+Thumbs.db
+.DS_Store
