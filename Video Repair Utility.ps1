@@ -34,13 +34,63 @@ $directory = $PWD.Path
 $useForceFix = $false
 $deleteInstead = $false
 $useRecurse = $false
+$useGpu = $true
+
+# ================= UTILS =================
+$global:EncodersDict = @{
+    "H.264" = @{CPU="libx264"; NVIDIA="h264_nvenc"; AMD="h264_amf"; Intel="h264_qsv"};
+    "HEVC" = @{CPU="libx265"; NVIDIA="hevc_nvenc"; AMD="hevc_amf"; Intel="hevc_qsv"};
+    "AV1" = @{CPU="libsvtav1"; NVIDIA="av1_nvenc"; AMD="av1_amf"; Intel="av1_qsv"}
+}
+
+function Detect-Gpu($codec) {
+    $vendors = @("NVIDIA", "AMD", "Intel")
+    foreach ($vendor in $vendors) {
+        $encoder = $global:EncodersDict[$codec][$vendor]
+        $result = & ffmpeg -v error -f lavfi -i color=c=black:s=16x16:d=0.1 -c:v $encoder -f null - 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            return @{Name=$vendor; Encoder=$encoder}
+        }
+    }
+    return @{Name="None"; Encoder=$global:EncodersDict[$codec]["CPU"]}
+}
+
+$gpuCodec = "H.264"
+$gpuName = "Auto"
+$gpuEncoder = "auto"
 
 # ================= INPUT UI WIZARD =================
-Clear-Host
-Write-Host "==========================================" -ForegroundColor Cyan
-Write-Host " 🎬  ULTIMATE VIDEO REPAIR UTILITY  🎬 " -ForegroundColor White -BackgroundColor DarkBlue
-Write-Host "==========================================" -ForegroundColor Cyan
-Write-Host ""
+function Write-Box($lines, $title = $null, $fgColor = "Cyan") {
+    $width = 50
+    $dashLine = "─" * ($width - 2)
+    Write-Host "╭$dashLine╮" -ForegroundColor $fgColor
+    if ($title) {
+        $paddedTitle = " {0} " -f $title.PadLeft(($width - 4 + $title.Length) / 2).PadRight($width - 4)
+        Write-Host "│" -ForegroundColor $fgColor -NoNewline
+        Write-Host $paddedTitle -NoNewline
+        Write-Host "│" -ForegroundColor $fgColor
+        Write-Host "├$dashLine┤" -ForegroundColor $fgColor
+    }
+    foreach ($line in $lines) {
+        if ($line -eq "-") {
+            Write-Host "├$dashLine┤" -ForegroundColor $fgColor
+        } else {
+            $paddedLine = " {0} " -f $line.PadRight($width - 4)
+            Write-Host "│" -ForegroundColor $fgColor -NoNewline
+            Write-Host $paddedLine -NoNewline
+            Write-Host "│" -ForegroundColor $fgColor
+        }
+    }
+    Write-Host "╰$dashLine╯" -ForegroundColor $fgColor
+}
+
+function Write-Header {
+    Clear-Host
+    Write-Box @("🎬 ULTIMATE VIDEO REPAIR UTILITY 🎬") -fgColor "Cyan"
+    Write-Host ""
+}
+
+Write-Header
 
 function Count-Files($dir) {
     $parentCount = 0
@@ -55,13 +105,18 @@ function Count-Files($dir) {
 }
 
 while ($true) {
-    Write-Host "Current Directory: " -NoNewline; Write-Host $directory -ForegroundColor Yellow
     $counts = Count-Files $directory
-    Write-Host "Parent Folder: " -NoNewline; Write-Host "$($counts.Parent) Files" -ForegroundColor Green -NoNewline
-    Write-Host ", Sub-Folders: " -NoNewline; Write-Host "$($counts.Sub) Files" -ForegroundColor Green
 
-    Write-Host "`n[P] Proceed  |  [C] Change Directory" -ForegroundColor Cyan
-    Write-Host "Press a key: " -NoNewline
+    Write-Box @(
+        "Dir: $directory",
+        "-",
+        "Parent: $($counts.Parent) Files",
+        "Sub:    $($counts.Sub) Files",
+        "-",
+        "[P] Proceed | [C] Change Dir"
+    ) -title "Directory Info" -fgColor "Yellow"
+
+    Write-Host "`nPress a key: " -NoNewline
 
     while ($true) {
         if ($Host.UI.RawUI.KeyAvailable) { $Host.UI.RawUI.FlushInputBuffer() }
@@ -76,27 +131,81 @@ while ($true) {
     if ($key -eq 'C') {
         $newDir = Select-Folder
         if ($newDir) { $directory = $newDir }
-        Clear-Host
-        Write-Host "==========================================" -ForegroundColor Cyan
-        Write-Host " 🎬  ULTIMATE VIDEO REPAIR UTILITY  🎬 " -ForegroundColor White -BackgroundColor DarkBlue
-        Write-Host "==========================================" -ForegroundColor Cyan
-        Write-Host ""
+        Write-Header
     } else {
         break
     }
 }
 
-Clear-Host
-Write-Host "==========================================" -ForegroundColor Cyan
-Write-Host " 🎬  ULTIMATE VIDEO REPAIR UTILITY  🎬 " -ForegroundColor White -BackgroundColor DarkBlue
-Write-Host "==========================================" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Select Preset:" -ForegroundColor Cyan
-Write-Host "[1] Standard        (Current Dir, Light Fix, Move broken)"
-Write-Host "[2] Deep Standard   (Subfolders, Light Fix, Move broken)"
-Write-Host "[3] Aggressive      (Current Dir, Force Fix, Move broken)"
-Write-Host "[4] Deep Aggressive (Subfolders, Force Fix, Move broken)"
-Write-Host "[5] Custom Settings"
+Write-Header
+Write-Box @(
+    "[1] H.264 (Standard/Legacy)",
+    "[2] HEVC  (H.265 / High Efficiency)",
+    "[3] AV1   (Next-Gen)"
+) -title "Select Target Codec" -fgColor "Magenta"
+Write-Host "`nPress 1-3: " -NoNewline
+
+while ($true) {
+    if ($Host.UI.RawUI.KeyAvailable) { $Host.UI.RawUI.FlushInputBuffer() }
+    $keyInfo = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    $key = $keyInfo.Character.ToString()
+    if ($key -match '[1-3]') {
+        Write-Host $key -ForegroundColor White
+        if ($key -eq '1') { $gpuCodec = "H.264" }
+        elseif ($key -eq '2') { $gpuCodec = "HEVC" }
+        elseif ($key -eq '3') { $gpuCodec = "AV1" }
+        break
+    }
+}
+
+Write-Header
+Write-Box @(
+    "[1] Auto   (Detects $gpuCodec hardware)",
+    "[2] CPU    ($($global:EncodersDict[$gpuCodec]['CPU']))",
+    "[3] NVIDIA ($($global:EncodersDict[$gpuCodec]['NVIDIA']))",
+    "[4] AMD    ($($global:EncodersDict[$gpuCodec]['AMD']))",
+    "[5] Intel  ($($global:EncodersDict[$gpuCodec]['Intel']))"
+) -title "Select Hardware" -fgColor "Cyan"
+Write-Host "`nPress 1-5: " -NoNewline
+
+while ($true) {
+    if ($Host.UI.RawUI.KeyAvailable) { $Host.UI.RawUI.FlushInputBuffer() }
+    $keyInfo = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    $key = $keyInfo.Character.ToString()
+    if ($key -match '[1-5]') {
+        Write-Host $key -ForegroundColor White
+        break
+    }
+}
+
+if ($key -eq '1') {
+    $autoGpu = Detect-Gpu $gpuCodec
+    $gpuName = $autoGpu.Name
+    $gpuEncoder = $autoGpu.Encoder
+} elseif ($key -eq '2') {
+    $gpuName = "CPU"
+    $gpuEncoder = $global:EncodersDict[$gpuCodec]["CPU"]
+} elseif ($key -eq '3') {
+    $gpuName = "NVIDIA"
+    $gpuEncoder = $global:EncodersDict[$gpuCodec]["NVIDIA"]
+} elseif ($key -eq '4') {
+    $gpuName = "AMD"
+    $gpuEncoder = $global:EncodersDict[$gpuCodec]["AMD"]
+} elseif ($key -eq '5') {
+    $gpuName = "Intel"
+    $gpuEncoder = $global:EncodersDict[$gpuCodec]["Intel"]
+}
+
+$useGpu = ($gpuName -ne "CPU" -and $gpuName -ne "None")
+
+Write-Header
+Write-Box @(
+    "[1] Standard   (Dir only, Light, Move broken)",
+    "[2] Deep Std   (Subfolders, Light, Move broken)",
+    "[3] Aggressive (Dir only, Force, Move broken)",
+    "[4] Deep Aggr  (Subfolders, Force, Move broken)",
+    "[5] Custom Settings"
+) -title "Select Preset" -fgColor "Green"
 Write-Host "`nPress 1-5: " -NoNewline
 
 while ($true) {
@@ -130,12 +239,15 @@ if ($key -eq '1') {
     }
 }
 
-Write-Host "`n==========================================" -ForegroundColor Cyan
-Write-Host " Configuration Saved! " -ForegroundColor Green
-Write-Host "==========================================" -ForegroundColor Cyan
+Write-Header
+Write-Box @(
+    "Configuration Saved!",
+    "-",
+    "Codec:   $gpuCodec",
+    "Encoder: $gpuName ($gpuEncoder)"
+) -title "Success" -fgColor "Green"
 
-Clear-Host
-Write-Host "🚀 Starting Scan..." -ForegroundColor Green
+Write-Host "`n🚀 Starting Scan...`n" -ForegroundColor Green
 
 # ================= INIT =================
 if (!(Test-Path "$directory\$brokenFolder")) {
@@ -205,7 +317,8 @@ function Fix-Video-Light($file) {
 function Fix-Video-Force($file) {
     $out = "$file.tmp.force.mp4"
     if (Test-Path $out) { Remove-Item $out -Force -ErrorAction SilentlyContinue }
-    & ffmpeg -y -err_detect ignore_err -fflags +genpts+discardcorrupt -async 1 -i "$file" -c:v libx264 -c:a aac "$out" 2>$null
+
+    & ffmpeg -y -err_detect ignore_err -fflags +genpts+discardcorrupt -async 1 -i "$file" -c:v $gpuEncoder -c:a aac "$out" 2>$null
     return $out
 }
 
@@ -219,11 +332,21 @@ foreach ($file in $allFiles) {
     $filePath = $file.FullName
     $fileSize = $file.Length
     
+    # Format output path to be concise
+    $dirName = Split-Path $filePath
+    $fileName = Split-Path $filePath -Leaf
+    if ($dirName -eq $directory) {
+        $displayPath = $fileName
+    } else {
+        $parentFolder = Split-Path $dirName -Leaf
+        $displayPath = "../$parentFolder/$fileName"
+    }
+
     # Generate cache key combining path and size to detect changes
     $cacheKey = "$filePath|$fileSize"
 
     Write-Host "[$count/$total] ⏳ Processing: " -NoNewline -ForegroundColor Cyan
-    Write-Host "$filePath" -ForegroundColor White
+    Write-Host "$displayPath" -ForegroundColor White
 
     if ($processed.ContainsKey($cacheKey)) {
         Write-Host "   ⏭️ Skipped (already processed)" -ForegroundColor DarkGray
@@ -255,6 +378,7 @@ foreach ($file in $allFiles) {
         }
         continue
     }
+    # Cleanup light fix temp file on failure
     if (Test-Path $fixed) { Remove-Item $fixed -Force -ErrorAction SilentlyContinue }
 
     if ($useForceFix) {
@@ -273,6 +397,7 @@ foreach ($file in $allFiles) {
             }
             continue
         }
+        # Cleanup force fix temp file on failure
         if (Test-Path $forced) { Remove-Item $forced -Force -ErrorAction SilentlyContinue }
     }
 
