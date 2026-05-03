@@ -35,52 +35,53 @@ $useForceFix = $false
 $deleteInstead = $false
 $useRecurse = $false
 
-# ================= INPUT UI =================
-function Draw-Menu {
-    Clear-Host
-    Write-Host "==========================================" -ForegroundColor Cyan
-    Write-Host " 🎬  ULTIMATE VIDEO REPAIR UTILITY  🎬 " -ForegroundColor White -BackgroundColor DarkBlue
-    Write-Host "==========================================" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "Selected Directory: " -NoNewline; Write-Host "$directory" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "Options:"
+# ================= INPUT UI WIZARD =================
+Clear-Host
+Write-Host "==========================================" -ForegroundColor Cyan
+Write-Host " 🎬  ULTIMATE VIDEO REPAIR UTILITY  🎬 " -ForegroundColor White -BackgroundColor DarkBlue
+Write-Host "==========================================" -ForegroundColor Cyan
+Write-Host ""
 
-    $rStatus = if ($useRecurse) { "[✅ ON ]" } else { "[❌ OFF]" }
-    Write-Host "  R - Scan Subfolders         : $rStatus" -ForegroundColor (if ($useRecurse) { "Green" } else { "DarkGray" })
-
-    $fStatus = if ($useForceFix) { "[✅ ON ]" } else { "[❌ OFF]" }
-    Write-Host "  F - Enable Force Fix        : $fStatus" -ForegroundColor (if ($useForceFix) { "Green" } else { "DarkGray" })
-
-    $dStatus = if ($deleteInstead) { "[🗑️ DEL]" } else { "[📁 MOV]" }
-    Write-Host "  D - Action on Failure       : $dStatus" -ForegroundColor (if ($deleteInstead) { "Red" } else { "Cyan" })
-
-    Write-Host ""
-    Write-Host "Commands:"
-    Write-Host "  C - Change Directory" -ForegroundColor Yellow
-    Write-Host "  S - START SCAN" -ForegroundColor Green
-    Write-Host "  Q - QUIT" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Press a key to select an option..." -ForegroundColor DarkGray
-}
-
-$startScan = $false
-while (-not $startScan) {
-    Draw-Menu
-    if ($Host.UI.RawUI.KeyAvailable) {
-        $Host.UI.RawUI.FlushInputBuffer()
-    }
-    $keyInfo = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-    $key = $keyInfo.Character
-    switch -Regex ($key) {
-        "(?i)r" { $useRecurse = -not $useRecurse }
-        "(?i)f" { $useForceFix = -not $useForceFix }
-        "(?i)d" { $deleteInstead = -not $deleteInstead }
-        "(?i)c" { $directory = Select-Folder }
-        "(?i)s" { $startScan = $true }
-        "(?i)q" { Write-Host "Exiting..."; exit }
+function Ask-Question($prompt) {
+    Write-Host $prompt -NoNewline -ForegroundColor Yellow
+    Write-Host " (y/n): " -NoNewline -ForegroundColor DarkGray
+    while ($true) {
+        if ($Host.UI.RawUI.KeyAvailable) { $Host.UI.RawUI.FlushInputBuffer() }
+        $keyInfo = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        $key = $keyInfo.Character.ToString().ToLower()
+        if ($key -eq 'y') {
+            Write-Host "Yes" -ForegroundColor Green
+            return $true
+        } elseif ($key -eq 'n') {
+            Write-Host "No" -ForegroundColor Red
+            return $false
+        }
     }
 }
+
+# 1. Directory Selection
+if (Ask-Question "📁 Change current directory? (Current: $directory)") {
+    $directory = Select-Folder
+    Write-Host "   Selected: $directory" -ForegroundColor Cyan
+}
+
+# 2. Subfolders
+$useRecurse = Ask-Question "📂 Scan subfolders as well?"
+
+# 3. Force Fix
+$useForceFix = Ask-Question "🔥 Enable aggressive FORCE FIX if light fix fails?"
+
+# 4. Action on Failure
+if (Ask-Question "🗑️ Delete broken files instead of moving them to a folder?") {
+    $deleteInstead = $true
+} else {
+    $deleteInstead = $false
+}
+
+Write-Host ""
+Write-Host "==========================================" -ForegroundColor Cyan
+Write-Host " Configuration Saved! " -ForegroundColor Green
+Write-Host "==========================================" -ForegroundColor Cyan
 
 Clear-Host
 Write-Host "🚀 Starting Scan..." -ForegroundColor Green
@@ -131,7 +132,15 @@ function Test-Video($file) {
     if (!(Test-Path $file) -or (Get-Item $file).Length -eq 0) {
         return "File empty or not found"
     }
-    $result = & ffmpeg -v error -i "$file" -f null - 2>&1
+    
+    # Fast Validation: ffprobe to check if it's even a valid media file
+    $probeResult = & ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$file" 2>&1
+    if ([string]::IsNullOrWhiteSpace($probeResult) -or $probeResult -match "Invalid data found") {
+        return "Not a valid media file or fatally corrupted header"
+    }
+
+    # Fast Demuxing Test: -c copy skips decoding, improving performance exponentially
+    $result = & ffmpeg -v error -i "$file" -c copy -f null - 2>&1
     return $result
 }
 
@@ -158,7 +167,7 @@ foreach ($file in $allFiles) {
     $count++
     $filePath = $file.FullName
     $fileSize = $file.Length
-
+    
     # Generate cache key combining path and size to detect changes
     $cacheKey = "$filePath|$fileSize"
 
@@ -232,7 +241,7 @@ foreach ($file in $allFiles) {
         Write-Host "   ❌ Error moving/deleting file. It might be locked." -ForegroundColor Red
         Safe-Log "Error moving/deleting: $filePath. Exception: $($_.Exception.Message)"
     }
-
+    
     $stats.Failed++
 
     # Save progress after each file
