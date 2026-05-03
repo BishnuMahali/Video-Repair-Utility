@@ -52,9 +52,8 @@ function Detect-Gpu {
     return @{Name="None"; Encoder="libx264"}
 }
 
-$gpuInfo = Detect-Gpu
-$gpuName = $gpuInfo.Name
-$gpuEncoder = $gpuInfo.Encoder
+$gpuName = "Auto"
+$gpuEncoder = "auto"
 
 # ================= INPUT UI WIZARD =================
 Clear-Host
@@ -81,12 +80,6 @@ while ($true) {
     Write-Host "Parent Folder: " -NoNewline; Write-Host "$($counts.Parent) Files" -ForegroundColor Green -NoNewline
     Write-Host ", Sub-Folders: " -NoNewline; Write-Host "$($counts.Sub) Files" -ForegroundColor Green
 
-    if ($gpuName -ne "None") {
-        Write-Host "GPU Mode: Auto ($gpuName) [Use Custom Preset to select CPU]" -ForegroundColor Green
-    } else {
-        Write-Host "GPU Mode: Auto (CPU) [No GPU Detected]" -ForegroundColor Green
-    }
-
     Write-Host "`n[P] Proceed  |  [C] Change Directory" -ForegroundColor Cyan
     Write-Host "Press a key: " -NoNewline
 
@@ -112,6 +105,54 @@ while ($true) {
         break
     }
 }
+
+Clear-Host
+Write-Host "==========================================" -ForegroundColor Cyan
+Write-Host " 🎬  ULTIMATE VIDEO REPAIR UTILITY  🎬 " -ForegroundColor White -BackgroundColor DarkBlue
+Write-Host "==========================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Select Encoder / GPU Mode:" -ForegroundColor Cyan
+Write-Host "[1] Auto   (Detects GPU, falls back to CPU)"
+Write-Host "[2] CPU    (libx264)"
+Write-Host "[3] NVIDIA (h264_nvenc)"
+Write-Host "[4] AMD    (h264_amf)"
+Write-Host "[5] Intel  (h264_qsv)"
+Write-Host "`nPress 1-5: " -NoNewline
+
+while ($true) {
+    if ($Host.UI.RawUI.KeyAvailable) { $Host.UI.RawUI.FlushInputBuffer() }
+    $keyInfo = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    $key = $keyInfo.Character.ToString()
+    if ($key -match '[1-5]') {
+        Write-Host $key -ForegroundColor White
+        break
+    }
+}
+
+if ($key -eq '1') {
+    $autoGpu = Detect-Gpu
+    if ($autoGpu.Name -eq "None") {
+        $gpuName = "CPU"
+        $gpuEncoder = "libx264"
+    } else {
+        $gpuName = $autoGpu.Name
+        $gpuEncoder = $autoGpu.Encoder
+    }
+} elseif ($key -eq '2') {
+    $gpuName = "CPU"
+    $gpuEncoder = "libx264"
+} elseif ($key -eq '3') {
+    $gpuName = "NVIDIA"
+    $gpuEncoder = "h264_nvenc"
+} elseif ($key -eq '4') {
+    $gpuName = "AMD"
+    $gpuEncoder = "h264_amf"
+} elseif ($key -eq '5') {
+    $gpuName = "Intel"
+    $gpuEncoder = "h264_qsv"
+}
+
+$useGpu = ($gpuEncoder -ne "libx264")
 
 Clear-Host
 Write-Host "==========================================" -ForegroundColor Cyan
@@ -145,26 +186,21 @@ if ($key -eq '1') {
 } elseif ($key -eq '4') {
     $useRecurse = $true; $useForceFix = $true; $deleteInstead = $false
 } elseif ($key -eq '5') {
-    Write-Host "`nEnter custom settings (4 characters: Y/N for [Subfolders][Force Fix][Delete Broken][Use GPU]): " -NoNewline -ForegroundColor Yellow
+    Write-Host "`nEnter custom settings (3 characters: Y/N for [Subfolders][Force Fix][Delete Broken]): " -NoNewline -ForegroundColor Yellow
     $custom = Read-Host
-    if ($custom.Length -ge 4) {
+    if ($custom.Length -ge 3) {
         $useRecurse = ($custom[0] -match 'Y|y')
         $useForceFix = ($custom[1] -match 'Y|y')
         $deleteInstead = ($custom[2] -match 'Y|y')
-        $useGpu = ($custom[3] -match 'Y|y')
-    } elseif ($custom.Length -ge 3) {
-        $useRecurse = ($custom[0] -match 'Y|y')
-        $useForceFix = ($custom[1] -match 'Y|y')
-        $deleteInstead = ($custom[2] -match 'Y|y')
-        $useGpu = $true
     } else {
         Write-Host "Invalid input, defaulting to Standard..." -ForegroundColor Red
-        $useRecurse = $false; $useForceFix = $false; $deleteInstead = $false; $useGpu = $true
+        $useRecurse = $false; $useForceFix = $false; $deleteInstead = $false
     }
 }
 
 Write-Host "`n==========================================" -ForegroundColor Cyan
 Write-Host " Configuration Saved! " -ForegroundColor Green
+Write-Host " Encoder: $gpuName ($gpuEncoder)" -ForegroundColor Green
 Write-Host "==========================================" -ForegroundColor Cyan
 
 Clear-Host

@@ -73,7 +73,8 @@ def detect_gpu():
             pass
     return "None", "libx264"
 
-gpu_name, gpu_encoder = detect_gpu()
+gpu_name = "Auto"
+gpu_encoder = "auto"
 
 def clear_host():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -121,10 +122,6 @@ while True:
     print(f"Current Directory: {directory}")
     counts = count_files(directory)
     print(f"Parent Folder: {counts['Parent']} Files, Sub-Folders: {counts['Sub']} Files")
-    if gpu_name != "None":
-        print(f"GPU Mode: Auto ({gpu_name}) [Use Custom Preset to select CPU]")
-    else:
-        print("GPU Mode: Auto (CPU) [No GPU Detected]")
 
     print("\n[P] Proceed  |  [C] Change Directory")
     print("Press a key: ", end='', flush=True)
@@ -146,6 +143,42 @@ while True:
         print()
     else:
         break
+
+clear_host()
+print("==========================================")
+print(" 🎬  ULTIMATE VIDEO REPAIR UTILITY  🎬 ")
+print("==========================================")
+print()
+print("Select Encoder / GPU Mode:")
+print("[1] Auto   (Detects GPU, falls back to CPU)")
+print("[2] CPU    (libx264)")
+print("[3] NVIDIA (h264_nvenc)")
+print("[4] AMD    (h264_amf)")
+print("[5] Intel  (h264_qsv)")
+print("\nPress 1-5: ", end='', flush=True)
+
+while True:
+    key = getch()
+    if key in ('1', '2', '3', '4', '5'):
+        print(key)
+        break
+
+if key == '1':
+    auto_name, auto_enc = detect_gpu()
+    if auto_name == "None":
+        gpu_name, gpu_encoder = "CPU", "libx264"
+    else:
+        gpu_name, gpu_encoder = auto_name, auto_enc
+elif key == '2':
+    gpu_name, gpu_encoder = "CPU", "libx264"
+elif key == '3':
+    gpu_name, gpu_encoder = "NVIDIA", "h264_nvenc"
+elif key == '4':
+    gpu_name, gpu_encoder = "AMD", "h264_amf"
+elif key == '5':
+    gpu_name, gpu_encoder = "Intel", "h264_qsv"
+
+use_gpu = (gpu_encoder != "libx264")
 
 clear_host()
 print("==========================================")
@@ -175,24 +208,19 @@ elif key == '3':
 elif key == '4':
     use_recurse, use_force_fix, delete_instead = True, True, False
 elif key == '5':
-    print("\nEnter custom settings (4 characters: Y/N for [Subfolders][Force Fix][Delete Broken][Use GPU]): ", end='')
+    print("\nEnter custom settings (3 characters: Y/N for [Subfolders][Force Fix][Delete Broken]): ", end='')
     custom = input().strip().upper()
-    if len(custom) >= 4:
+    if len(custom) >= 3:
         use_recurse = (custom[0] == 'Y')
         use_force_fix = (custom[1] == 'Y')
         delete_instead = (custom[2] == 'Y')
-        use_gpu = (custom[3] == 'Y')
-    elif len(custom) >= 3:
-        use_recurse = (custom[0] == 'Y')
-        use_force_fix = (custom[1] == 'Y')
-        delete_instead = (custom[2] == 'Y')
-        use_gpu = True
     else:
         print("Invalid input, defaulting to Standard...")
-        use_recurse, use_force_fix, delete_instead, use_gpu = False, False, False, True
+        use_recurse, use_force_fix, delete_instead = False, False, False
 
 print("\n==========================================")
 print(" Configuration Saved! ")
+print(f" Encoder: {gpu_name} ({gpu_encoder})")
 print("==========================================")
 
 clear_host()
