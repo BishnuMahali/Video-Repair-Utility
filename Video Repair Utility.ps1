@@ -25,10 +25,48 @@ function Select-Folder {
 }
 
 # ================= CONFIG =================
-$videoExtensions = @("*.mp4","*.mkv","*.avi","*.mov","*.flv","*.wmv","*.asf","*.mpeg","*.mpg","*.webm","*.vob","*.mp4v","*.m4v","*.3gp","*.3g2","*.ts","*.mts","*.m2ts","*.divx","*.xvid","*.f4v","*.rmvb","*.mkv")
+$knownVideoExtensions = @(".mp4",".mkv",".avi",".mov",".flv",".wmv",".asf",".mpeg",".mpg",".webm",".vob",".mp4v",".m4v",".3gp",".3g2",".ts",".mts",".m2ts",".divx",".xvid",".f4v",".rmvb")
+$ignoredExtensions = @(
+    ".txt", ".pdf", ".zip", ".rar", ".7z", ".tar", ".gz", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp",
+    ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".exe", ".dll", ".sys", ".ini", ".cfg", ".xml", ".json", ".html",
+    ".css", ".js", ".py", ".ps1", ".bat", ".sh", ".iso", ".bin", ".cue", ".md", ".log", ".srt", ".sub", ".ass", ".vtt"
+)
 $cacheFile = "repair_cache.json"
 $logFile = "repair_log.txt"
 $brokenFolder = "Broken Files"
+
+function Test-CheckVideoFileWithFfprobe {
+    param([string]$filePath)
+    $output = (ffprobe -v error -select_streams v:0 -show_entries stream=codec_type -of default=noprint_wrappers=1:nokey=1 $filePath 2>$null) -join ""
+    if ($output -match "video") {
+        return $true
+    }
+    return $false
+}
+
+function Test-IsVideoFile {
+    param([string]$filePath)
+
+    if ($filePath -match "\.tmp\.") { return $false }
+
+    $splitPath = $filePath -split [RegEx]::Escape([IO.Path]::DirectorySeparatorChar)
+    if ($splitPath -contains $brokenFolder) { return $false }
+
+    $ext = [System.IO.Path]::GetExtension($filePath).ToLower()
+
+    if ([string]::IsNullOrWhiteSpace($ext)) { return $false }
+
+    if ($knownVideoExtensions -contains $ext) { return $true }
+    if ($ignoredExtensions -contains $ext) { return $false }
+
+    if (Test-CheckVideoFileWithFfprobe $filePath) {
+        $script:knownVideoExtensions += $ext
+        return $true
+    } else {
+        $script:ignoredExtensions += $ext
+        return $false
+    }
+}
 
 $directory = $PWD.Path
 $useForceFix = $false
@@ -95,12 +133,19 @@ Write-Header
 function Count-Files($dir) {
     $parentCount = 0
     $subCount = 0
-    foreach ($ext in $videoExtensions) {
-        $pFiles = @(Get-ChildItem -Path $dir -Filter $ext -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch "\.tmp\." })
-        $parentCount += $pFiles.Count
-        $sFiles = @(Get-ChildItem -Path $dir -Recurse -Filter $ext -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch "\.tmp\." })
-        $subCount += ($sFiles.Count - $pFiles.Count)
+
+    $allDirFiles = Get-ChildItem -Path $dir -Recurse -File -ErrorAction SilentlyContinue
+
+    foreach ($file in $allDirFiles) {
+        if (Test-IsVideoFile $file.FullName) {
+            if ($file.DirectoryName -eq $dir) {
+                $parentCount++
+            } else {
+                $subCount++
+            }
+        }
     }
+
     return @{ Parent = $parentCount; Sub = $subCount }
 }
 
@@ -267,11 +312,15 @@ if (Test-Path $cacheFile) {
 }
 
 $allFiles = @()
-foreach ($ext in $videoExtensions) {
-    if ($useRecurse) {
-        $allFiles += Get-ChildItem -Path $directory -Recurse -Filter $ext -File | Where-Object { $_.FullName -notmatch "\.tmp\." }
-    } else {
-        $allFiles += Get-ChildItem -Path $directory -Filter $ext -File | Where-Object { $_.FullName -notmatch "\.tmp\." }
+if ($useRecurse) {
+    $tempFiles = Get-ChildItem -Path $directory -Recurse -File
+} else {
+    $tempFiles = Get-ChildItem -Path $directory -File
+}
+
+foreach ($file in $tempFiles) {
+    if (Test-IsVideoFile $file.FullName) {
+        $allFiles += $file
     }
 }
 
