@@ -25,7 +25,7 @@ function Select-Folder {
 }
 
 # ================= CONFIG =================
-$videoExtensions = @("*.mp4","*.mkv","*.avi","*.mov","*.flv","*.wmv")
+$videoExtensions = @("*.mp4","*.mkv","*.avi","*.mov","*.flv","*.wmv","*.asf","*.mpeg","*.mpg","*.webm","*.vob","*.mp4v","*.m4v","*.3gp","*.3g2","*.ts","*.mts","*.m2ts","*.divx","*.xvid","*.f4v","*.rmvb","*.mkv")
 $cacheFile = "repair_cache.json"
 $logFile = "repair_log.txt"
 $brokenFolder = "Broken Files"

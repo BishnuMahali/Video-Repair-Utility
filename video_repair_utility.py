@@ -49,7 +49,7 @@ def select_folder(current_dir):
     return current_dir
 
 # ================= CONFIG =================
-VIDEO_EXTENSIONS = ('.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv')
+VIDEO_EXTENSIONS = ('.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv', '.asf', '.mpeg', '.mpg', '.webm', '.vob', '.mp4v', '.m4v', '.3gp', '.3g2', '.ts', '.mts', '.m2ts', '.divx', '.xvid', '.f4v', '.rmvb')
 CACHE_FILE = "repair_cache.json"
 LOG_FILE = "repair_log.txt"
 BROKEN_FOLDER = "Broken Files"
