@@ -49,10 +49,55 @@ def select_folder(current_dir):
     return current_dir
 
 # ================= CONFIG =================
-VIDEO_EXTENSIONS = ('.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv', '.asf', '.mpeg', '.mpg', '.webm', '.vob', '.mp4v', '.m4v', '.3gp', '.3g2', '.ts', '.mts', '.m2ts', '.divx', '.xvid', '.f4v', '.rmvb')
+KNOWN_VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv', '.asf', '.mpeg', '.mpg', '.webm', '.vob', '.mp4v', '.m4v', '.3gp', '.3g2', '.ts', '.mts', '.m2ts', '.divx', '.xvid', '.f4v', '.rmvb'}
+IGNORED_EXTENSIONS = {
+    '.txt', '.pdf', '.zip', '.rar', '.7z', '.tar', '.gz', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp',
+    '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.exe', '.dll', '.sys', '.ini', '.cfg', '.xml', '.json', '.html',
+    '.css', '.js', '.py', '.ps1', '.bat', '.sh', '.iso', '.bin', '.cue', '.md', '.log', '.srt', '.sub', '.ass', '.vtt'
+}
 CACHE_FILE = "repair_cache.json"
 LOG_FILE = "repair_log.txt"
 BROKEN_FOLDER = "Broken Files"
+
+def check_video_file_with_ffprobe(filepath):
+    try:
+        result = subprocess.run(
+            ['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_type', '-of', 'default=noprint_wrappers=1:nokey=1', filepath],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        return 'video' in result.stdout
+    except Exception:
+        return False
+
+def is_video_file(filepath):
+    if ".tmp." in filepath:
+        return False
+
+    # Ignore Broken Files directory
+    if BROKEN_FOLDER in os.path.split(os.path.dirname(filepath)):
+         return False
+    if BROKEN_FOLDER in filepath.split(os.sep):
+         return False
+
+    ext = os.path.splitext(filepath)[1].lower()
+
+    if not ext:
+        # Ignore files without extensions to be safe and avoid scanning everything
+        return False
+
+    if ext in KNOWN_VIDEO_EXTENSIONS:
+        return True
+
+    if ext in IGNORED_EXTENSIONS:
+        return False
+
+    # Extension is unknown, run ffprobe
+    if check_video_file_with_ffprobe(filepath):
+        KNOWN_VIDEO_EXTENSIONS.add(ext)
+        return True
+    else:
+        IGNORED_EXTENSIONS.add(ext)
+        return False
 
 directory = os.getcwd()
 use_force_fix = False
@@ -115,8 +160,12 @@ def count_files(dir_path):
     sub_count = 0
 
     for root_dir, dirs, files in os.walk(dir_path):
+        if BROKEN_FOLDER in dirs:
+            dirs.remove(BROKEN_FOLDER)
+
         for file in files:
-            if file.lower().endswith(VIDEO_EXTENSIONS) and ".tmp." not in file:
+            file_path = os.path.join(root_dir, file)
+            if is_video_file(file_path):
                 if root_dir == dir_path:
                     parent_count += 1
                 else:
@@ -127,13 +176,19 @@ def get_all_files(dir_path, recurse):
     all_files = []
     if recurse:
         for root_dir, dirs, files in os.walk(dir_path):
+            if BROKEN_FOLDER in dirs:
+                dirs.remove(BROKEN_FOLDER)
+
             for file in files:
-                if file.lower().endswith(VIDEO_EXTENSIONS) and ".tmp." not in file:
-                    all_files.append(os.path.join(root_dir, file))
+                file_path = os.path.join(root_dir, file)
+                if is_video_file(file_path):
+                    all_files.append(file_path)
     else:
         for file in os.listdir(dir_path):
+            if file == BROKEN_FOLDER:
+                continue
             file_path = os.path.join(dir_path, file)
-            if os.path.isfile(file_path) and file.lower().endswith(VIDEO_EXTENSIONS) and ".tmp." not in file:
+            if os.path.isfile(file_path) and is_video_file(file_path):
                 all_files.append(file_path)
     return all_files
 
