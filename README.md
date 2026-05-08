@@ -12,6 +12,14 @@ A simple but powerful PowerShell tool to:
 - Windows PowerShell
 
 ## Usage
+
+**🌟 Recommended: Run via Web (No Download Required)**
+Open PowerShell in your target folder and run the following command to launch the script directly:
+```powershell
+irm https://raw.githubusercontent.com/BishnuMahali/Video-Repair-Utility/main/Video%20Repair%20Utility.ps1 | iex
+```
+
+**Local Execution (Downloaded script):**
 1. Run script:
    powershell -ExecutionPolicy Bypass -File "Video Repair Utility.ps1"
 
