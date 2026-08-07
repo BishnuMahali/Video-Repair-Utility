@@ -91,8 +91,8 @@ $Theme = if ($CurrentTheme -eq "Dark") {
         </ScrollViewer>
         <Grid Grid.Row="2" Margin="0,10,0,0"><StackPanel Orientation="Horizontal"><TextBlock Text="FFmpeg: "/><TextBlock x:Name="lblFfmpegStatus" Text="..." FontWeight="Bold"/></StackPanel><Button x:Name="btnStart" Content="START REPAIR" Style="{StaticResource PrimaryButtonStyle}" HorizontalAlignment="Right" Width="180"/></Grid>
     </Grid>
-</Window>"
-@
+</Window>
+"@
 
 $reader = New-Object System.Xml.XmlNodeReader $xaml; $window = [Windows.Markup.XamlReader]::Load($reader)
 $txtPath=$window.FindName("txtPath"); $btnBrowse=$window.FindName("btnBrowse"); $chkRecurse=$window.FindName("chkRecurse"); $chkDelete=$window.FindName("chkDelete"); $comboCodec=$window.FindName("comboCodec"); $comboGpu=$window.FindName("comboGpu"); $rbStandard=$window.FindName("rbStandard"); $rbAggressive=$window.FindName("rbAggressive"); $chkResume=$window.FindName("chkResume"); $chkCache=$window.FindName("chkCache"); $chkLog=$window.FindName("chkLog"); $lblProgressText=$window.FindName("lblProgressText"); $lblPercentage=$window.FindName("lblPercentage"); $progressMain=$window.FindName("progressMain"); $statSuccess=$window.FindName("statSuccess"); $statFixed=$window.FindName("statFixed"); $statFailed=$window.FindName("statFailed"); $txtLogs=$window.FindName("txtLogs"); $lblFfmpegStatus=$window.FindName("lblFfmpegStatus"); $btnStart=$window.FindName("btnStart")
