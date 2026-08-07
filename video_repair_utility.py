@@ -340,6 +340,7 @@ stats = {
     'Total': total,
     'OK': 0,
     'FixedLight': 0,
+    'FixedCodec': 0,
     'FixedForce': 0,
     'Failed': 0,
     'Ignored': 0
@@ -357,6 +358,14 @@ def test_video(filepath):
         if not result.stdout.strip() or "Invalid data found" in result.stderr:
             return "Not a valid media file or fatally corrupted header"
 
+        # Check for Codec Mismatch (e.g., HEVC/AV1 in AVI appearing as rawvideo)
+        ext = os.path.splitext(filepath)[1].lower()
+        if ext in ['.avi', '.wmv', '.flv', '.vob', '.ts']:
+            codec_cmd = ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name", "-of", "default=noprint_wrappers=1:nokey=1", filepath]
+            codec_res = subprocess.run(codec_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if "rawvideo" in codec_res.stdout.lower():
+                return "Codec metadata missing"
+
         # Fast Demuxing Test
         test_cmd = ["ffmpeg", "-v", "error", "-i", filepath, "-c", "copy", "-f", "null", "-"]
         result2 = subprocess.run(test_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -367,6 +376,25 @@ def test_video(filepath):
     except FileNotFoundError:
         print("\nERROR: ffmpeg/ffprobe not found. Please make sure they are installed and in your PATH.")
         sys.exit(1)
+
+def fix_video_codec_remux(filepath):
+    out = os.path.splitext(filepath)[0] + ".tmp.codec.mp4"
+    if os.path.exists(out):
+        try: os.remove(out)
+        except: pass
+
+    # First try HEVC
+    cmd = ["ffmpeg", "-y", "-loglevel", "error", "-c:v", "hevc", "-i", filepath, "-c", "copy", "-movflags", "+faststart", out]
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if result.returncode != 0:
+        # Try AV1
+        if os.path.exists(out):
+            try: os.remove(out)
+            except: pass
+        cmd = ["ffmpeg", "-y", "-loglevel", "error", "-c:v", "av1", "-i", filepath, "-c", "copy", "-movflags", "+faststart", out]
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    
+    return out
 
 def fix_video_light(filepath):
     out = filepath + ".tmp.light.mp4"
@@ -424,6 +452,37 @@ for filepath in all_files:
         with open(CACHE_FILE, 'w', encoding='utf-8') as f:
             json.dump(processed, f, indent=2)
         continue
+
+    if "Codec metadata missing" in error_msg:
+        print("   🔍 Codec missing detected. Attempting HEVC/AV1 recovery...")
+        fixed_codec = fix_video_codec_remux(filepath)
+        if not test_video(fixed_codec):
+            print("   🪄 Codec recovery successful")
+            try:
+                # We need to change the extension to .mp4 since we are remuxing
+                new_filepath = os.path.splitext(filepath)[0] + ".mp4"
+                if os.path.exists(new_filepath) and new_filepath.lower() != filepath.lower():
+                     os.remove(new_filepath)
+                shutil.move(fixed_codec, new_filepath)
+                if new_filepath.lower() != filepath.lower():
+                    if delete_instead:
+                        os.remove(filepath)
+                    else:
+                        shutil.move(filepath, os.path.join(broken_path, os.path.basename(filepath)))
+                processed[cache_key] = "Fixed-Codec"
+                stats['FixedCodec'] += 1
+            except Exception as e:
+                print(f"   ❌ Error replacing original file. Temp file left at {fixed_codec}")
+                safe_log(f"Error replacing: {filepath}. Exception: {e}")
+
+            with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+                json.dump(processed, f, indent=2)
+            continue
+        
+        # Cleanup codec fix temp file on failure
+        if os.path.exists(fixed_codec):
+            try: os.remove(fixed_codec)
+            except: pass
 
     print("   ⚠️ Errors detected. Attempting light fix...")
     fixed_light = fix_video_light(filepath)
@@ -497,6 +556,7 @@ print("==========================================")
 print(f" 🔢 Total Scanned : {stats['Total']}")
 print(f" ✅ OK            : {stats['OK']}")
 print(f" ⏭️ Ignored       : {stats['Ignored']}")
+print(f" 🪄 Codec Remux   : {stats['FixedCodec']}")
 print(f" 🛠️ Light Fixed   : {stats['FixedLight']}")
 print(f" 🔥 Force Fixed   : {stats['FixedForce']}")
 print(f" ❌ Failed        : {stats['Failed']}")

@@ -35,6 +35,7 @@ irm https://raw.githubusercontent.com/BishnuMahali/Video-Repair-Utility/main/Vid
 - Batch processing
 
 ## Notes
+- Codec Recovery = Auto-remuxes HEVC/AV1 missing metadata from legacy containers (`.avi`, `.wmv`)
 - Light fix = fast, no re-encode
 - Force fix = slower, re-encodes video
 

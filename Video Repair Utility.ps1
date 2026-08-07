@@ -142,8 +142,25 @@ $btnStart.Add_Click({
             $current++; $key=$file.FullName.ToLowerInvariant(); $sig="$($file.Length)|$($file.LastWriteTimeUtc.Ticks)"
             Write-Output @{ Type="Progress"; Current=$current; Total=$total; File=$file.Name }
             if ($config.ResumeEnabled -and $config.Cache.ContainsKey($key)) { if ($config.Cache[$key].Signature -eq $sig) { Write-Output @{ Type="Log"; Msg="Cached Skip: $($file.Name)"; Sev="INFO" }; continue } }
-            $demux=& ffmpeg -v error -i "$($file.FullName)" -c copy -f null - 2>&1
-            if ([string]::IsNullOrWhiteSpace($demux)) { $results.Success++; Write-Output @{ Type="Log"; Msg="OK: $($file.Name)"; Sev="SUCCESS" }; continue }
+            $isBroken = $false; $codecMissing = $false
+            if (@(".avi", ".wmv", ".flv", ".vob", ".ts") -contains $file.Extension.ToLower()) { $codecName = & ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$($file.FullName)" 2>&1; if ($codecName -match "rawvideo") { $codecMissing = $true; $isBroken = $true } }
+            if (-not $isBroken) { $demux=& ffmpeg -v error -i "$($file.FullName)" -c copy -f null - 2>&1; if (-not [string]::IsNullOrWhiteSpace($demux)) { $isBroken = $true } }
+            if (-not $isBroken) { $results.Success++; Write-Output @{ Type="Log"; Msg="OK: $($file.Name)"; Sev="SUCCESS" }; continue }
+            if ($codecMissing) {
+                Write-Output @{ Type="Log"; Msg="Codec missing detected. Attempting recovery: $($file.Name)"; Sev="WARNING" }
+                $tmp="$($file.FullName).tmp.mp4"; & ffmpeg -y -loglevel error -c:v hevc -i "$($file.FullName)" -c copy -movflags +faststart "$tmp" 2>$null
+                if ($LASTEXITCODE -ne 0) { & ffmpeg -y -loglevel error -c:v av1 -i "$($file.FullName)" -c copy -movflags +faststart "$tmp" 2>$null }
+                if ($LASTEXITCODE -eq 0 -and (Test-Path $tmp)) {
+                    $newFile = [System.IO.Path]::ChangeExtension($file.FullName, ".mp4")
+                    if ((Test-Path $newFile) -and ($newFile -ne $file.FullName)) { Remove-Item $newFile -Force }
+                    Move-Item $tmp $newFile -Force
+                    if ($newFile -ne $file.FullName) { if ($config.Delete) { Remove-Item $file.FullName -Force } else { Move-Item $file.FullName $brokenPath -Force } }
+                    $results.Fixed++; Write-Output @{ Type="Log"; Msg="CODEC RECOVERED: $($file.Name)"; Sev="WARNING" }
+                    if ($config.CacheEnabled) { $config.Cache[$key]=@{Path=$file.FullName; Signature=$sig; Status="Processed"}; $config.Cache.Values | ConvertTo-Json -Depth 4 | Set-Content $config.CacheFile }
+                    continue
+                }
+                if (Test-Path $tmp) { Remove-Item $tmp -Force }
+            }
             $tmp="$($file.FullName).tmp.mp4"; if ($config.Force) { & ffmpeg -y -err_detect ignore_err -fflags +genpts+discardcorrupt -async 1 -i "$($file.FullName)" -c:v $config.Encoder -c:a aac "$tmp" 2>$null } else { & ffmpeg -y -i "$($file.FullName)" -c copy "$tmp" 2>$null }
             if ($LASTEXITCODE -eq 0 -and (Test-Path $tmp)) { Move-Item $tmp $file.FullName -Force; $results.Fixed++; Write-Output @{ Type="Log"; Msg="FIXED: $($file.Name)"; Sev="WARNING" } }
             else { if (Test-Path $tmp) { Remove-Item $tmp -Force }; $results.Failed++; Write-Output @{ Type="Log"; Msg="FAILED: $($file.Name)"; Sev="ERROR" }; if ($config.Delete) { Remove-Item $file.FullName -Force } else { Move-Item $file.FullName $brokenPath -Force } }
