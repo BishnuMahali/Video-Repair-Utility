@@ -16,7 +16,7 @@ A simple but powerful PowerShell tool to:
 **🌟 Recommended: Run via Web (No Download Required)**
 Open PowerShell in your target folder and run the following command to launch the script directly:
 ```powershell
-irm https://raw.githubusercontent.com/BishnuMahali/Video-Repair-Utility/main/Video%20Repair%20Utility.ps1 | iex
+irm https://raw.githubusercontent.com/BishnuMahali/Video-Repair-Utility/main/Video%20Repair%20Utility.ps1 | Out-String | iex
 ```
 
 **Local Execution (Downloaded script):**
