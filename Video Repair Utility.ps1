@@ -143,7 +143,7 @@ $btnStart.Add_Click({
             Write-Output @{ Type="Progress"; Current=$current; Total=$total; File=$file.Name }
             if ($config.ResumeEnabled -and $config.Cache.ContainsKey($key)) { if ($config.Cache[$key].Signature -eq $sig) { Write-Output @{ Type="Log"; Msg="Cached Skip: $($file.Name)"; Sev="INFO" }; continue } }
             $isBroken = $false; $codecMissing = $false
-            if (@(".avi", ".wmv", ".flv", ".vob", ".ts") -contains $file.Extension.ToLower()) { $codecName = & ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$($file.FullName)" 2>&1; if ($codecName -match "rawvideo") { $codecMissing = $true; $isBroken = $true } }
+            if (@(".avi", ".wmv", ".flv", ".vob", ".ts", ".mpg", ".mpeg", ".m2ts", ".mts") -contains $file.Extension.ToLower()) { $codecName = & ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$($file.FullName)" 2>&1; if ($codecName -match "rawvideo") { $codecMissing = $true; $isBroken = $true } }
             if (-not $isBroken) { $demux=& ffmpeg -v error -i "$($file.FullName)" -c copy -f null - 2>&1; if (-not [string]::IsNullOrWhiteSpace($demux)) { $isBroken = $true } }
             if (-not $isBroken) { $results.Success++; Write-Output @{ Type="Log"; Msg="OK: $($file.Name)"; Sev="SUCCESS" }; continue }
             if ($codecMissing) {

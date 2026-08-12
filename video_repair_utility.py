@@ -360,7 +360,7 @@ def test_video(filepath):
 
         # Check for Codec Mismatch (e.g., HEVC/AV1 in AVI appearing as rawvideo)
         ext = os.path.splitext(filepath)[1].lower()
-        if ext in ['.avi', '.wmv', '.flv', '.vob', '.ts']:
+        if ext in ['.avi', '.wmv', '.flv', '.vob', '.ts', '.mpg', '.mpeg', '.m2ts', '.mts']:
             codec_cmd = ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name", "-of", "default=noprint_wrappers=1:nokey=1", filepath]
             codec_res = subprocess.run(codec_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             if "rawvideo" in codec_res.stdout.lower():
