@@ -57,7 +57,7 @@ $savedSettings = Load-Settings
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Ultimate Video Repair Utility" Height="900" Width="960" Background="$($Theme.WindowBg)" WindowStartupLocation="CenterScreen" MinWidth="800" MinHeight="700">
+        Title="Ultimate Video Repair Utility" Height="900" Width="960" Background="$($Theme.WindowBg)" WindowStartupLocation="CenterScreen" MinWidth="800" MinHeight="700" AllowDrop="True">
     <Window.Resources>
         <ControlTemplate x:Key="ComboBoxTemplate" TargetType="ComboBox">
             <Grid>
@@ -97,13 +97,13 @@ $savedSettings = Load-Settings
         <Style x:Key="SecondaryButtonStyle" TargetType="Button"><Setter Property="Background" Value="$($Theme.InputBg)"/><Setter Property="Foreground" Value="$($Theme.TextMain)"/><Setter Property="BorderBrush" Value="$($Theme.Border)"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Cursor" Value="Hand"/><Setter Property="Height" Value="35"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Name="Border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Border" Property="Background" Value="$($Theme.CardBg)"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
     </Window.Resources>
 
-    <Grid Margin="25">
+    <Grid Margin="25" AllowDrop="True">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <StackPanel Grid.Row="0" Margin="0,0,0,15"><TextBlock Text="VIDEO REPAIR PRO" FontWeight="Bold" FontSize="22"/><TextBlock Text="Automatic scan, verification, and restoration of corrupted media" Foreground="$($Theme.TextSub)" FontSize="13"/></StackPanel>
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel>
                 <!-- Card 1: Directory -->
-                <Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="1. SCANNING DIRECTORY" FontWeight="SemiBold" Margin="0,0,0,10" Foreground="$($Theme.TextSub)"/><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="txtPath" Grid.Column="0" Height="35" IsReadOnly="True"/><Button x:Name="btnBrowse" Grid.Column="1" Content="Browse" Width="100" Margin="10,0,0,0" Height="35" Style="{StaticResource SecondaryButtonStyle}"/></Grid><StackPanel Orientation="Horizontal" Margin="0,15,0,0"><CheckBox x:Name="chkRecurse" Content="Include Subfolders"/><CheckBox x:Name="chkDelete" Content="Delete broken files" Margin="20,0,0,0" Foreground="$($Theme.Error)"/></StackPanel></StackPanel></Border>
+                <Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="1. SCANNING TARGET (FILE OR FOLDER)" FontWeight="SemiBold" Margin="0,0,0,10" Foreground="$($Theme.TextSub)"/><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="txtPath" Grid.Column="0" Height="35" IsReadOnly="True" AllowDrop="True"/><Button x:Name="btnBrowse" Grid.Column="1" Content="Browse Folder" Width="100" Margin="10,0,0,0" Height="35" Style="{StaticResource SecondaryButtonStyle}"/><Button x:Name="btnBrowseFile" Grid.Column="2" Content="Browse File" Width="90" Margin="10,0,0,0" Height="35" Style="{StaticResource SecondaryButtonStyle}"/></Grid><StackPanel Orientation="Horizontal" Margin="0,15,0,0"><CheckBox x:Name="chkRecurse" Content="Include Subfolders"/><CheckBox x:Name="chkDelete" Content="Delete broken files" Margin="20,0,0,0" Foreground="$($Theme.Error)"/></StackPanel></StackPanel></Border>
 
                 <!-- Card 2+3: Strategy + Intensity -->
                 <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
@@ -147,7 +147,7 @@ $savedSettings = Load-Settings
 "@
 
 $reader = New-Object System.Xml.XmlNodeReader $xaml; $window = [Windows.Markup.XamlReader]::Load($reader)
-$txtPath=$window.FindName("txtPath"); $btnBrowse=$window.FindName("btnBrowse"); $chkRecurse=$window.FindName("chkRecurse"); $chkDelete=$window.FindName("chkDelete"); $comboCodec=$window.FindName("comboCodec"); $comboGpu=$window.FindName("comboGpu"); $lblEncoderInfo=$window.FindName("lblEncoderInfo"); $rbStandard=$window.FindName("rbStandard"); $rbAggressive=$window.FindName("rbAggressive"); $chkResume=$window.FindName("chkResume"); $chkCache=$window.FindName("chkCache"); $chkLog=$window.FindName("chkLog"); $lblProgressText=$window.FindName("lblProgressText"); $lblPercentage=$window.FindName("lblPercentage"); $progressMain=$window.FindName("progressMain"); $lblFileCount=$window.FindName("lblFileCount"); $statSuccess=$window.FindName("statSuccess"); $statFixed=$window.FindName("statFixed"); $statFailed=$window.FindName("statFailed"); $txtLogs=$window.FindName("txtLogs"); $lblFfmpegStatus=$window.FindName("lblFfmpegStatus"); $lblElapsed=$window.FindName("lblElapsed"); $btnStart=$window.FindName("btnStart")
+$txtPath=$window.FindName("txtPath"); $btnBrowse=$window.FindName("btnBrowse"); $btnBrowseFile=$window.FindName("btnBrowseFile"); $chkRecurse=$window.FindName("chkRecurse"); $chkDelete=$window.FindName("chkDelete"); $comboCodec=$window.FindName("comboCodec"); $comboGpu=$window.FindName("comboGpu"); $lblEncoderInfo=$window.FindName("lblEncoderInfo"); $rbStandard=$window.FindName("rbStandard"); $rbAggressive=$window.FindName("rbAggressive"); $chkResume=$window.FindName("chkResume"); $chkCache=$window.FindName("chkCache"); $chkLog=$window.FindName("chkLog"); $lblProgressText=$window.FindName("lblProgressText"); $lblPercentage=$window.FindName("lblPercentage"); $progressMain=$window.FindName("progressMain"); $lblFileCount=$window.FindName("lblFileCount"); $statSuccess=$window.FindName("statSuccess"); $statFixed=$window.FindName("statFixed"); $statFailed=$window.FindName("statFailed"); $txtLogs=$window.FindName("txtLogs"); $lblFfmpegStatus=$window.FindName("lblFfmpegStatus"); $lblElapsed=$window.FindName("lblElapsed"); $btnStart=$window.FindName("btnStart")
 
 $global:logEnabled=$false; $global:logFilePath=""
 $global:isRunning=$false; $global:startTime=$null; $global:cancelRequested=$false
@@ -232,7 +232,7 @@ function Save-CurrentSettings {
 function Apply-SavedSettings {
     if ($null -eq $savedSettings) { return }
     try {
-        if ($savedSettings.directory -and (Test-Path $savedSettings.directory -PathType Container)) { $txtPath.Text = $savedSettings.directory }
+        if ($savedSettings.directory -and (Test-Path $savedSettings.directory)) { $txtPath.Text = $savedSettings.directory }
         if ($savedSettings.codec) {
             foreach ($item in $comboCodec.Items) {
                 if ($item.Content -eq $savedSettings.codec) { $comboCodec.SelectedItem = $item; break }
@@ -261,8 +261,14 @@ function Apply-SavedSettings {
     } catch {}
 }
 
-$txtPath.Text=$PWD.Path; Check-FFmpeg; Update-GpuList; Apply-SavedSettings
-$btnBrowse.Add_Click({ Add-Type -AssemblyName System.Windows.Forms; $dialog=New-Object System.Windows.Forms.FolderBrowserDialog; $dialog.SelectedPath=$txtPath.Text; if ($dialog.ShowDialog() -eq "OK") { $txtPath.Text=$dialog.SelectedPath } })
+$txtPath.Text=$PWD.Path; if ($args.Count -gt 0 -and (Test-Path $args[0])) { $txtPath.Text = $args[0] }
+Check-FFmpeg; Update-GpuList; Apply-SavedSettings
+
+$btnBrowse.Add_Click({ Add-Type -AssemblyName System.Windows.Forms; $dialog=New-Object System.Windows.Forms.FolderBrowserDialog; $current=$txtPath.Text; if (Test-Path $current -PathType Leaf) { $current=Split-Path $current }; $dialog.SelectedPath=$current; if ($dialog.ShowDialog() -eq "OK") { $txtPath.Text=$dialog.SelectedPath } })
+$btnBrowseFile.Add_Click({ Add-Type -AssemblyName System.Windows.Forms; $dialog=New-Object System.Windows.Forms.OpenFileDialog; $current=$txtPath.Text; if (Test-Path $current -PathType Leaf) { $current=Split-Path $current }; $dialog.InitialDirectory=$current; $dialog.Filter="All files (*.*)|*.*"; if ($dialog.ShowDialog() -eq "OK") { $txtPath.Text=$dialog.FileName } })
+
+$window.Add_Drop({ param($sender, $e); if ($e.Data.GetDataPresent([System.Windows.DataFormats]::FileDrop)) { $files = $e.Data.GetData([System.Windows.DataFormats]::FileDrop); if ($files.Count -gt 0) { $txtPath.Text = $files[0] } } })
+
 $comboCodec.Add_SelectionChanged({ Update-GpuList })
 $comboGpu.Add_SelectionChanged({ Update-EncoderInfo })
 $chkResume.Add_Click({ if ($chkResume.IsChecked) { $chkCache.IsChecked=$true } }); $chkCache.Add_Click({ if (-not $chkCache.IsChecked) { $chkResume.IsChecked=$false } })
@@ -272,6 +278,7 @@ function Set-UIState {
     $window.Dispatcher.Invoke({
         $state = if ($running) { $false } else { $true }
         $btnBrowse.IsEnabled = $state
+        $btnBrowseFile.IsEnabled = $state
         $comboCodec.IsEnabled = $state
         $comboGpu.IsEnabled = $state
         $chkRecurse.IsEnabled = $state
@@ -338,7 +345,29 @@ $btnStart.Add_Click({
         $results=@{ Success=0; Fixed=0; Failed=0; Skipped=0 }
         $cpuEncoder = @{ "H.264"="libx264"; "HEVC"="libx265"; "AV1"="libsvtav1" }[$config.CodecName]
 
-        $files=Get-ChildItem -Path $config.Dir -File -Recurse:$config.Recurse | Where-Object { $config.Exts -contains $_.Extension.ToLower() }
+        if (-not (Test-Path $config.Dir)) {
+            Write-Output @{ Type="Error"; Msg="Selected path does not exist." }
+            return
+        }
+        
+        $isDir = (Get-Item $config.Dir) -is [System.IO.DirectoryInfo]
+        $workDir = if ($isDir) { $config.Dir } else { Split-Path $config.Dir }
+        $brokenPath = Join-Path $workDir $config.BrokenName
+        
+        Write-Output @{ Type="Log"; Msg="Scanning: $($config.Dir)"; Sev="INFO" }
+        
+        $files = @()
+        if (-not $isDir) {
+            if ($config.Exts -contains [System.IO.Path]::GetExtension($config.Dir).ToLower()) {
+                $files += Get-Item $config.Dir
+            }
+        } else {
+            if ($config.Recurse) {
+                $files = Get-ChildItem -Path $config.Dir -Recurse -File | Where-Object { $config.Exts -contains $_.Extension.ToLower() -and $_.FullName -notmatch "\\$($config.BrokenName)\\" -and $_.FullName -notmatch "\\\.Video Repair Utility\\" }
+            } else {
+                $files = Get-ChildItem -Path $config.Dir -File | Where-Object { $config.Exts -contains $_.Extension.ToLower() }
+            }
+        }
         $total=$files.Count; $current=0
 
         Write-Output @{ Type="Log"; Msg="Found $total video file(s)"; Sev="INFO" }

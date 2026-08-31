@@ -15,6 +15,12 @@ from datetime import datetime
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
+try:
+    from tkinterdnd2 import TkinterDnD, DND_FILES
+    HAS_DND = True
+except ImportError:
+    HAS_DND = False
+
 # ================= CONFIG =================
 APP_NAME = "Video Repair Utility"
 KNOWN_VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv', '.asf', '.mpeg', '.mpg', '.webm', '.vob', '.mp4v', '.m4v', '.3gp', '.3g2', '.ts', '.mts', '.m2ts', '.divx', '.xvid', '.f4v', '.rmvb'}
@@ -156,9 +162,19 @@ def detect_gpu_encoder(codec):
             results[vendor] = (False, encoder)
     return results
 
-def get_all_files(dir_path, recurse):
-    """Get all video files in directory."""
+def get_all_files(target_path, recurse):
+    """Get all video files from a path (file or directory)."""
     all_files = []
+    
+    if os.path.isfile(target_path):
+        if is_video_file(target_path):
+            all_files.append(target_path)
+        return all_files
+        
+    dir_path = target_path
+    if not os.path.isdir(dir_path):
+        return []
+
     if recurse:
         for root_dir, dirs, files in os.walk(dir_path):
             if BROKEN_FOLDER in dirs:
@@ -626,14 +642,22 @@ class RepairEngine:
 # ================= GUI APPLICATION =================
 class VideoRepairApp:
     def __init__(self):
-        self.root = tk.Tk()
-        self.root.title("Ultimate Video Repair Utility")
-        self.root.geometry("960x860")
-        self.root.minsize(800, 700)
-
-        # Theme
         self.theme_name = get_system_theme()
         self.theme = THEMES[self.theme_name]
+
+        if HAS_DND:
+            self.root = TkinterDnD.Tk()
+        else:
+            self.root = tk.Tk()
+            
+        self.root.title("Ultimate Video Repair Utility")
+        self.root.geometry("960x900")
+        self.root.minsize(800, 700)
+        self.root.configure(bg=self.theme['bg'])
+
+        if HAS_DND:
+            self.root.drop_target_register(DND_FILES)
+            self.root.dnd_bind('<<Drop>>', self._on_drop)
 
         # Configure root
         self.root.configure(bg=self.theme['bg'])
@@ -763,7 +787,7 @@ class VideoRepairApp:
         card = self._make_card(self.scroll_frame)
         card.pack(fill=tk.X, pady=(0, 15), ipady=10, ipadx=15)
 
-        tk.Label(card, text="1. SCANNING DIRECTORY", font=("Segoe UI", 10, "bold"),
+        tk.Label(card, text="1. SCANNING TARGET (FILE OR FOLDER)", font=("Segoe UI", 10, "bold"),
                 bg=t['card'], fg=t['text_sub']).pack(anchor='w', padx=10, pady=(10, 8))
 
         path_frame = tk.Frame(card, bg=t['card'])
@@ -773,13 +797,24 @@ class VideoRepairApp:
                                 fg=t['text'], insertbackground=t['text'], relief=tk.FLAT,
                                 highlightthickness=1, highlightbackground=t['border'])
         self.txt_path.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=6)
-        self.txt_path.insert(0, os.getcwd())
+        
+        # Check command line args
+        if len(sys.argv) > 1 and os.path.exists(sys.argv[1]):
+            self.txt_path.insert(0, os.path.normpath(sys.argv[1]))
+        else:
+            self.txt_path.insert(0, os.getcwd())
 
-        self.btn_browse = tk.Button(path_frame, text="Browse", font=("Segoe UI", 10),
+        self.btn_browse = tk.Button(path_frame, text="Browse Folder", font=("Segoe UI", 10),
                                     bg=t['input_bg'], fg=t['text'], bd=1, relief=tk.SOLID,
-                                    cursor="hand2", padx=15, pady=4,
+                                    cursor="hand2", padx=10, pady=4,
                                     command=self._browse_directory)
         self.btn_browse.pack(side=tk.LEFT, padx=(10, 0))
+
+        self.btn_browse_file = tk.Button(path_frame, text="Browse File", font=("Segoe UI", 10),
+                                    bg=t['input_bg'], fg=t['text'], bd=1, relief=tk.SOLID,
+                                    cursor="hand2", padx=10, pady=4,
+                                    command=self._browse_file)
+        self.btn_browse_file.pack(side=tk.LEFT, padx=(5, 0))
 
         opts_frame = tk.Frame(card, bg=t['card'])
         opts_frame.pack(fill=tk.X, padx=10, pady=(10, 5))
@@ -970,10 +1005,29 @@ class VideoRepairApp:
     # ================= UI Actions =================
     def _browse_directory(self):
         current = self.txt_path.get()
+        if os.path.isfile(current):
+            current = os.path.dirname(current)
         folder = filedialog.askdirectory(initialdir=current, title="Select Directory to Scan")
         if folder:
             self.txt_path.delete(0, tk.END)
             self.txt_path.insert(0, os.path.normpath(folder))
+
+    def _browse_file(self):
+        current = self.txt_path.get()
+        if os.path.isfile(current):
+            current = os.path.dirname(current)
+        file = filedialog.askopenfilename(initialdir=current, title="Select Video File", 
+                                          filetypes=[("Video Files", "*.*")])
+        if file:
+            self.txt_path.delete(0, tk.END)
+            self.txt_path.insert(0, os.path.normpath(file))
+
+    def _on_drop(self, event):
+        path = event.data
+        if path.startswith('{') and path.endswith('}'):
+            path = path[1:-1]
+        self.txt_path.delete(0, tk.END)
+        self.txt_path.insert(0, os.path.normpath(path))
 
     def _check_ffmpeg(self):
         if check_ffmpeg():
@@ -1018,7 +1072,7 @@ class VideoRepairApp:
 
     def _apply_saved_settings(self):
         s = self.saved_settings
-        if 'directory' in s and os.path.isdir(s['directory']):
+        if 'directory' in s and os.path.exists(s['directory']):
             self.txt_path.delete(0, tk.END)
             self.txt_path.insert(0, s['directory'])
         if 'codec' in s:
@@ -1089,6 +1143,7 @@ class VideoRepairApp:
         """Enable/disable UI elements based on running state."""
         state = tk.DISABLED if running else tk.NORMAL
         self.btn_browse.config(state=state)
+        self.btn_browse_file.config(state=state)
         self.txt_path.config(state=state)
         self.combo_codec.config(state="disabled" if running else "readonly")
         self.combo_gpu.config(state="disabled" if running else "readonly")
@@ -1111,9 +1166,9 @@ class VideoRepairApp:
             return
 
         # Validate
-        directory = self.txt_path.get()
-        if not os.path.isdir(directory):
-            messagebox.showerror("Error", "Please select a valid directory.")
+        target_path = self.txt_path.get()
+        if not os.path.exists(target_path):
+            messagebox.showerror("Error", "Please select a valid directory or file.")
             return
 
         if not check_ffmpeg():
@@ -1150,7 +1205,7 @@ class VideoRepairApp:
 
     def _worker(self):
         """Background worker thread for file processing."""
-        directory = self.txt_path.get()
+        target_path = self.txt_path.get()
         recurse = self.chk_recurse_var.get()
         encoder = self._get_selected_encoder()
         codec = self.combo_codec_var.get()
@@ -1160,12 +1215,15 @@ class VideoRepairApp:
         use_resume = self.chk_resume_var.get()
         use_log = self.chk_log_var.get()
 
+        # Determine working directory (parent dir if target is a file)
+        directory = os.path.dirname(target_path) if os.path.isfile(target_path) else target_path
+
         # Create engine
         self.engine = RepairEngine(encoder, codec, log_callback=lambda m, s: self.root.after(0, self._add_log, m, s))
 
         # Scan files
-        self.root.after(0, self._add_log, f"Scanning directory: {directory}", "INFO")
-        files = get_all_files(directory, recurse)
+        self.root.after(0, self._add_log, f"Scanning: {target_path}", "INFO")
+        files = get_all_files(target_path, recurse)
         total = len(files)
 
         self.root.after(0, self._add_log, f"Found {total} video file(s)", "INFO")

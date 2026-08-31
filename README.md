@@ -5,6 +5,7 @@ A powerful, dual-GUI video repair tool that automatically scans, detects, and fi
 ## ✨ Features
 
 - **Dual GUI** — Modern graphical interface in both **PowerShell WPF** and **Python Tkinter** with dark/light theme support
+- **Drag & Drop** — Fully supports drag-and-drop for both individual video files and entire folders
 - **Smart Launcher** — Auto-detects Python availability; falls back to PowerShell seamlessly
 - **VFR Detection & Fix** — Detects Variable Frame Rate (common in smartphone recordings) and forces CFR re-encoding
 - **Multi-Strategy Repair** — Codec recovery → Light fix (stream copy) → Force fix (re-encode) with automatic escalation
